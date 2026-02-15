@@ -4,6 +4,8 @@ import (
 	"log"
 
 	"github.com/atrahy/easypg/internal/sql"
+	"github.com/atrahy/easypg/internal/tui/components/schemaTable"
+	"github.com/atrahy/easypg/internal/tui/components/tableTable"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -22,10 +24,11 @@ type definitionTabModel struct {
 
 	focusedTileCursor int
 
-	schemaTile *schemaTile
-	// Using the same tile model for now to be sure to not over engineer abstraction
-	tableTile  *schemaTile
-	columnTile int
+	// tableAttr *sql.TableAttr
+
+	schemaTile *schemaTable.SchemaTable
+	tableTile  *tableTable.TableTable
+	columnTile *columnTile
 
 	viewTile int
 
@@ -36,8 +39,9 @@ func newDefinitionTabPage(db *sql.DBConnection) definitionTabModel {
 	return definitionTabModel{
 		db: db,
 
-		schemaTile: newSchemaTile(),
-		tableTile:  newSchemaTile(),
+		schemaTile: schemaTable.NewSchemaTable(),
+		tableTile:  tableTable.NewTableTable(),
+		columnTile: newColumnTile(),
 	}
 }
 
@@ -56,27 +60,33 @@ func (t definitionTabModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.sideTileWidth, t.sideTileHeigth, t.viewTileWidth, t.viewTileHeight = t.updateSize(t.width, t.height)
 
 	case schemaList:
-		schemasResult := schemaList(msg)
-		schemas := make([]string, len(schemasResult.schemas))
-		for i, u := range schemasResult.schemas {
-			schemas[i] = u.Name
-		}
+		schemaList := schemaList(msg)
 
-		setItemCmd := t.schemaTile.SetItems(schemas)
-		cmds = append(cmds, setItemCmd, schemaCursorUpdateEvent)
+		setItemCmd := t.schemaTile.SetItems(schemaList.schemas)
+		cmds = append(cmds, setItemCmd)
 
-	case schemaCursorUpdateMsg:
+	case schemaTable.SchemaCursorUpdateMsg:
 		log.Printf("schemaCursorUpdate: name :%s", t.schemaTile.GetSelectedItemName())
 		cmds = append(cmds, t.fetchTables(t.schemaTile.GetSelectedItemName()))
 
 	case tablesList:
-		tablesResult := tablesList(msg)
-		tables := make([]string, len(tablesResult.tables))
-		for i, u := range tablesResult.tables {
-			tables[i] = u.Name
+		tableList := tablesList(msg)
+
+		setItemCmd := t.tableTile.SetItems(tableList.tables)
+		cmds = append(cmds, setItemCmd)
+
+	case tableTable.TableCursorUpdateMsg:
+		if t.tableTile.IsEmpty() {
+			log.Printf("tableCursorUpdate: table is empty")
+			cmds = append(cmds, t.fetchTableAttr("-1"))
+			break
 		}
 
-		t.tableTile.SetItems(tables)
+		log.Printf("tableCursorUpdate: name :%s", t.tableTile.GetSelectedItemName())
+		cmds = append(cmds, t.fetchTableAttr(t.tableTile.GetSelectedItemOID()))
+
+	case tableAttr:
+		t.columnTile.SetItems(tableAttr(msg).tableAttr.Columns)
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -89,17 +99,14 @@ func (t definitionTabModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch definitionTabPageTileList[t.focusedTileCursor] {
 	case "schema":
-		currentCursor := t.schemaTile.Cursor()
-
 		cmd := t.schemaTile.Update(msg)
 		cmds = append(cmds, cmd)
-
-		newCursor := t.schemaTile.Cursor()
-		if currentCursor != newCursor {
-			cmds = append(cmds, schemaCursorUpdateEvent)
-		}
 	case "table":
 		cmd := t.tableTile.Update(msg)
+		cmds = append(cmds, cmd)
+	case "column":
+		t.columnTile.Columns.Focus()
+		cmd := t.columnTile.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -108,7 +115,7 @@ func (t definitionTabModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (t definitionTabModel) View() string {
 	sideTileStyle := lipgloss.NewStyle().Width(t.sideTileWidth).Height(t.sideTileHeigth)
-	viewTileStyle := lipgloss.NewStyle().Width(t.viewTileWidth).Height(t.viewTileHeight)
+	// viewTileStyle := lipgloss.NewStyle().Width(t.viewTileWidth).Height(t.viewTileHeight)
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Left,
@@ -116,16 +123,18 @@ func (t definitionTabModel) View() string {
 			lipgloss.Top,
 			sideTileStyle.Inherit(t.applyTileStyle("schema")).Render(t.schemaTile.View()),
 			sideTileStyle.Inherit(t.applyTileStyle("table")).Render(t.tableTile.View()),
-			sideTileStyle.Inherit(t.applyTileStyle("column")).Render(""),
+			sideTileStyle.Inherit(t.applyTileStyle("column")).Render(t.columnTile.View()),
 		),
-		viewTileStyle.Inherit(t.applyTileStyle("view")).Render(""),
+		// viewTileStyle.Inherit(t.applyTileStyle("view")).Render(""),
 	)
 }
 
 func (t definitionTabModel) updateSize(width, height int) (sideWidth int, sideHeight int, viewWidth int, viewHeight int) {
 	var sideTileWidth, sideTileHeigth, viewTileWidth, viewTileHeight int
 
-	sideTileWidth = width / 3
+	// No view panel for now so bigger panel
+	sideTileWidth = width / 2
+	// sideTileWidth = width / 3
 	sideTileHeigth = height / 3
 	viewTileWidth = width - sideTileWidth
 	viewTileHeight = sideTileHeigth * 3
@@ -140,6 +149,7 @@ func (t definitionTabModel) updateSize(width, height int) (sideWidth int, sideHe
 
 	t.schemaTile.SetSize(sideTileWidth, sideTileHeigth)
 	t.tableTile.SetSize(sideTileWidth, sideTileHeigth)
+	t.columnTile.SetSize(sideTileWidth, sideTileHeigth)
 
 	return sideTileWidth, sideTileHeigth, viewTileWidth, viewTileHeight
 }
@@ -159,7 +169,7 @@ func (t definitionTabModel) goToPrevTile() int {
 		return t.focusedTileCursor
 	}
 
-	return 0
+	return len(definitionTabPageTileList) - 1
 }
 
 func (t definitionTabModel) applyTileStyle(compare string) lipgloss.Style {

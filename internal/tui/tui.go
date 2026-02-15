@@ -42,13 +42,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// m.definitionTab.SetSize(m.width, m.height)
-		// t, cmd := m.definitionTab.Update(msg)
-		// m.definitionTab = t
-		// cmds = append(cmds, cmd)
-		// t, cmd = m.editorTab.Update(msg)
-		// m.definitionTab = t
-		// cmds = append(cmds, cmd)
 
 	case tea.KeyMsg:
 		switch msg.String() {

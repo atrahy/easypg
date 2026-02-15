@@ -16,6 +16,10 @@ type tablesList struct {
 	tables []sql.Table
 }
 
+type tableAttr struct {
+	tableAttr *sql.TableAttr
+}
+
 func (t *definitionTabModel) fetchNamespaces() tea.Msg {
 	result, err := t.db.QueryNamespaces()
 	if err != nil {
@@ -35,5 +39,17 @@ func (t *definitionTabModel) fetchTables(schema string) tea.Cmd {
 		}
 
 		return tablesList{tables: result}
+	}
+}
+
+func (t *definitionTabModel) fetchTableAttr(tableOID string) tea.Cmd {
+	return func() tea.Msg {
+		result, err := t.db.QueryTableAttr(tableOID)
+		if err != nil {
+			log.Printf("Failed to query table attr for oid: %s: %v\n", tableOID, err)
+			os.Exit(1)
+		}
+
+		return tableAttr{tableAttr: result}
 	}
 }

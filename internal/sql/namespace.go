@@ -41,5 +41,16 @@ func (c *DBConnection) QueryNamespaces() ([]Namespace, error) {
 		return nil, err
 	}
 
-	return result, nil
+	// Always get the public namespace first
+	var resultOrdered []Namespace
+
+	for _, value := range result {
+		if value.Name == "public" {
+			resultOrdered = append([]Namespace{value}, resultOrdered...)
+		} else {
+			resultOrdered = append(resultOrdered, value)
+		}
+	}
+
+	return resultOrdered, nil
 }

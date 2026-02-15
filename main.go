@@ -33,7 +33,7 @@ func main() {
 	}
 	defer db.Close()
 
-	p := tea.NewProgram(tui.NewModel(db))
+	p := tea.NewProgram(tui.NewModel(db), tea.WithAltScreen())
 
 	if _, err = p.Run(); err != nil {
 		fmt.Printf("Tea error: %v\n", err)
