@@ -49,6 +49,10 @@ func (t definitionTabModel) Init() tea.Cmd {
 	return t.fetchNamespaces
 }
 
+// Panels drill into each other via a cursor-move -> fetch -> result -> SetItems chain:
+//   schemaTable.SchemaCursorUpdateMsg -> fetchTables -> tablesList -> tableTile.SetItems
+//   tableTable.TableCursorUpdateMsg   -> fetchTableAttr -> tableAttr -> columnTile.SetItems
+// Add new drill-down levels by extending this same chain.
 func (t definitionTabModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
