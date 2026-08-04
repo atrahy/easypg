@@ -1,12 +1,5 @@
 package sql
 
-import (
-	"context"
-	"log"
-
-	"github.com/jackc/pgx/v5"
-)
-
 const (
 	namespaceQuery = `
 		SELECT
@@ -29,15 +22,8 @@ type Namespace struct {
 }
 
 func (c *DBConnection) QueryNamespaces() ([]Namespace, error) {
-	rows, err := c.conn.Query(context.Background(), namespaceQuery)
+	result, err := makeQueryAndCollectRows[Namespace](c, namespaceQuery)
 	if err != nil {
-		log.Printf("Query failed: %v\n", err)
-		return nil, err
-	}
-
-	result, err := pgx.CollectRows(rows, pgx.RowToStructByName[Namespace])
-	if err != nil {
-		log.Printf("Collect failed: %v\n", err)
 		return nil, err
 	}
 
