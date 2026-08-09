@@ -2,7 +2,10 @@ package objectsPane
 
 import (
 	"github.com/atrahy/easypg/internal/sql"
+	"github.com/atrahy/easypg/internal/tui/components/search"
+	"github.com/atrahy/easypg/internal/tui/components/tableLayout"
 	"github.com/atrahy/easypg/internal/tui/components/tabs"
+	"github.com/atrahy/easypg/internal/tui/keys"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -28,9 +31,10 @@ type Selection struct {
 // its own table and a unified selection model covering the three kinds, and
 // emits ObjectSelectedMsg whenever the selection changes.
 type ObjectsPane struct {
-	tabs  *tabs.Model
-	table table.Model
-	width int
+	tabs   *tabs.Model
+	table  table.Model
+	width  int
+	filter search.TableFilter
 
 	tables  []sql.Table
 	views   []sql.Table
@@ -43,6 +47,7 @@ func New() *ObjectsPane {
 		table.WithColumns(getColumns(0, tabTable)),
 		table.WithRows([]table.Row{}),
 		table.WithFocused(true),
+		table.WithKeyMap(keys.TableKeyMap(keys.Default)),
 	)
 
 	s := table.DefaultStyles()
@@ -128,7 +133,26 @@ func (p *ObjectsPane) loadActive() tea.Cmd {
 	p.table.SetColumns(getColumns(p.width, p.tabs.ActiveLabel()))
 	p.table.SetRows(rows)
 	p.table.SetCursor(0)
+	p.filter.Reset()
 
+	return objectSelectedEvent
+}
+
+func (p *ObjectsPane) Filter(query string) int {
+	return p.filter.Apply(&p.table, query)
+}
+
+func (p *ObjectsPane) ClearFilter() {
+	p.filter.Clear(&p.table)
+}
+
+func (p *ObjectsPane) Filtering() bool {
+	return p.filter.Active()
+}
+
+// SelectionEvent re-emits the selection message, for the moves that do not go
+// through Update (a search jumping the cursor, a refresh).
+func (p *ObjectsPane) SelectionEvent() tea.Cmd {
 	return objectSelectedEvent
 }
 
@@ -157,7 +181,7 @@ func (p *ObjectsPane) Update(msg tea.Msg) tea.Cmd {
 // GetSelection returns the highlighted object, or ok=false when the active tab
 // has no objects.
 func (p *ObjectsPane) GetSelection() (Selection, bool) {
-	cursor := p.table.Cursor()
+	cursor := p.filter.SourceIndex(p.table.Cursor())
 	if cursor < 0 || cursor >= len(p.current) {
 		return Selection{}, false
 	}
@@ -166,7 +190,11 @@ func (p *ObjectsPane) GetSelection() (Selection, bool) {
 }
 
 func (p *ObjectsPane) View() string {
-	return lipgloss.JoinVertical(lipgloss.Left, p.tabs.View(), p.table.View())
+	// The tab strip is clamped to the pane width: in this narrow column it would
+	// otherwise wrap onto a second line and push the layout around.
+	strip := lipgloss.NewStyle().MaxWidth(p.width).Render(p.tabs.View())
+
+	return lipgloss.JoinVertical(lipgloss.Left, strip, p.table.View())
 }
 
 func (p *ObjectsPane) SetSize(width, height int) {
@@ -182,27 +210,17 @@ func (p *ObjectsPane) SetSize(width, height int) {
 	p.table.SetColumns(getColumns(width, p.tabs.ActiveLabel()))
 }
 
+// getColumns keeps the object name as wide as possible; the second column shows
+// the kind for tables/views and the (much longer) signature for functions, so it
+// only claims a real share of the width on the Function tab.
 func getColumns(width int, activeTab string) []table.Column {
-	if width <= 0 {
-		// Fallback until the first SetSize so columns are never zero-width.
-		width = 40
-	}
-
-	infoTitle := "Type"
-	infoWidth := 18
-
+	info := tableLayout.Spec{Title: "Type", Min: 8, Weight: 1}
 	if activeTab == tabFunction {
-		infoTitle = "Arguments"
-		infoWidth = 30
+		info = tableLayout.Spec{Title: "Arguments", Min: 10, Weight: 2}
 	}
 
-	nameWidth := width - infoWidth
-	if nameWidth < 0 {
-		nameWidth = 0
-	}
-
-	return []table.Column{
-		{Title: "Name", Width: nameWidth},
-		{Title: infoTitle, Width: infoWidth},
-	}
+	return tableLayout.Fit(width, []tableLayout.Spec{
+		{Title: "Name", Min: 12, Weight: 3},
+		info,
+	})
 }

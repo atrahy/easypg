@@ -5,6 +5,7 @@ Spec index. See also:
 - [02 — Query Tool](./02-query-tool.md)
 - [03 — Roadmap](./03-roadmap.md)
 - [04 — Backlog & technical debt](./04-backlog.md)
+- [05 — Keybindings, help overlay & search](./05-keybindings.md)
 
 ## Vision
 

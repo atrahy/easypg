@@ -2,18 +2,29 @@ package schemaTable
 
 import (
 	"github.com/atrahy/easypg/internal/sql"
+	"github.com/atrahy/easypg/internal/tui/components/search"
+	"github.com/atrahy/easypg/internal/tui/components/tableLayout"
+	"github.com/atrahy/easypg/internal/tui/keys"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
+// schemaSpecs favor the name in this narrow pane; the description takes what is
+// left (often nothing, in which case it collapses to its minimum).
+var schemaSpecs = []tableLayout.Spec{
+	{Title: "Name", Min: 12, Weight: 2},
+	{Title: "Description", Min: 6, Weight: 1},
+}
+
 type SchemaTable struct {
-	data  *[]sql.Namespace
-	table table.Model
+	data   *[]sql.Namespace
+	table  table.Model
+	filter search.TableFilter
 }
 
 func NewSchemaTable() *SchemaTable {
-	columns := getColumns(0)
+	columns := tableLayout.Fit(0, schemaSpecs)
 
 	rows := []table.Row{}
 
@@ -21,6 +32,7 @@ func NewSchemaTable() *SchemaTable {
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithFocused(true),
+		table.WithKeyMap(keys.TableKeyMap(keys.Default)),
 	)
 
 	s := table.DefaultStyles()
@@ -70,25 +82,49 @@ func (s *SchemaTable) SetItems(rows []sql.Namespace) tea.Cmd {
 
 	s.table.SetRows(items)
 	s.table.SetCursor(0)
+	s.filter.Reset()
 
+	return schemaCursorUpdateEvent
+}
+
+func (s *SchemaTable) Filter(query string) int {
+	return s.filter.Apply(&s.table, query)
+}
+
+func (s *SchemaTable) ClearFilter() {
+	s.filter.Clear(&s.table)
+}
+
+func (s *SchemaTable) Filtering() bool {
+	return s.filter.Active()
+}
+
+// SelectionEvent re-emits the selection message, for the moves that do not go
+// through Update (a search jumping the cursor, a refresh).
+func (s *SchemaTable) SelectionEvent() tea.Cmd {
 	return schemaCursorUpdateEvent
 }
 
 func (s *SchemaTable) SetSize(width, height int) {
 	s.table.SetWidth(width)
 	s.table.SetHeight(height)
-	s.table.SetColumns(getColumns(width))
+	s.table.SetColumns(tableLayout.Fit(width, schemaSpecs))
 }
 
+// GetSelectedItemName is empty until the first fetch lands, and stays safe if
+// the cursor and the data ever disagree (a refresh re-emitting the selection
+// before its rows arrive).
 func (s *SchemaTable) GetSelectedItemName() string {
-	return (*s.data)[s.table.Cursor()].Name
-}
-
-func getColumns(width int) []table.Column {
-	return []table.Column{
-		{Title: "Name", Width: 20},
-		{Title: "Description", Width: width - 20},
+	if s.data == nil {
+		return ""
 	}
+
+	cursor := s.filter.SourceIndex(s.table.Cursor())
+	if cursor < 0 || cursor >= len(*s.data) {
+		return ""
+	}
+
+	return (*s.data)[cursor].Name
 }
 
 func nullableToString(s *string) string {

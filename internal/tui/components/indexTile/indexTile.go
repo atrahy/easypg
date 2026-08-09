@@ -2,27 +2,35 @@ package indexTile
 
 import (
 	"github.com/atrahy/easypg/internal/sql"
+	"github.com/atrahy/easypg/internal/tui/components/search"
+	"github.com/atrahy/easypg/internal/tui/components/tableLayout"
+	"github.com/atrahy/easypg/internal/tui/keys"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
+// indexSpecs give most of the pane to the definition (a full CREATE INDEX
+// statement); the two boolean columns stay at their title width.
+var indexSpecs = []tableLayout.Spec{
+	{Title: "Name", Min: 16, Weight: 2},
+	{Title: "Definition", Min: 20, Weight: 5},
+	{Title: "Unique", Min: 6},
+	{Title: "Primary", Min: 7},
+}
+
 type Model struct {
-	table table.Model
+	table  table.Model
+	items  []sql.IndexAttr
+	filter search.TableFilter
 }
 
 func New() *Model {
-	columns := []table.Column{
-		{Title: "Name", Width: 24},
-		{Title: "Definition", Width: 40},
-		{Title: "Unique", Width: 6},
-		{Title: "Primary", Width: 7},
-	}
-
 	t := table.New(
-		table.WithColumns(columns),
+		table.WithColumns(tableLayout.Fit(0, indexSpecs)),
 		table.WithRows([]table.Row{}),
 		table.WithFocused(true),
+		table.WithKeyMap(keys.TableKeyMap(keys.Default)),
 	)
 
 	s := table.DefaultStyles()
@@ -43,8 +51,33 @@ func (m *Model) SetItems(rows []sql.IndexAttr) {
 		items = append(items, table.Row{row.Name, row.Definition, booleanToString(row.IsUnique), booleanToString(row.IsPrimary)})
 	}
 
+	m.items = rows
 	m.table.SetRows(items)
 	m.table.SetCursor(0)
+	m.filter.Reset()
+}
+
+func (m *Model) Filter(query string) int {
+	return m.filter.Apply(&m.table, query)
+}
+
+func (m *Model) ClearFilter() {
+	m.filter.Clear(&m.table)
+}
+
+func (m *Model) Filtering() bool {
+	return m.filter.Active()
+}
+
+// SelectedDetail returns the highlighted index's full definition, for the detail
+// pane's inspector strip.
+func (m *Model) SelectedDetail() string {
+	cursor := m.filter.SourceIndex(m.table.Cursor())
+	if cursor < 0 || cursor >= len(m.items) {
+		return ""
+	}
+
+	return m.items[cursor].Definition
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
@@ -62,6 +95,7 @@ func (m *Model) View() string {
 func (m *Model) SetSize(width, height int) {
 	m.table.SetWidth(width)
 	m.table.SetHeight(height)
+	m.table.SetColumns(tableLayout.Fit(width, indexSpecs))
 }
 
 func booleanToString(b bool) string {
