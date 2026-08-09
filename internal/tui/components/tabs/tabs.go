@@ -1,14 +1,11 @@
+// Package tabs holds the state of a pane's internal tab strip: the labels, which
+// of them currently apply, and which one is active. The rendering belongs to the
+// pane, which draws the strip in its own border.
 package tabs
 
-import (
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-)
-
-// Model is a reusable tab header ("[ A | B | C ]") with an active tab and an
-// adaptive visibility mask so callers can hide tabs depending on context
-// (e.g. a view has no index/constraint tabs).
+// Model is a reusable tab strip with an active tab and an adaptive visibility
+// mask so callers can hide tabs depending on context (e.g. a view has no
+// index/constraint tabs).
 type Model struct {
 	labels  []string
 	visible []int // indices into labels, in label order
@@ -97,22 +94,16 @@ func (m *Model) SetVisible(labels []string) {
 	}
 }
 
-func (m *Model) View() string {
-	activeStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Padding(0, 1)
-	normalStyle := lipgloss.NewStyle().Padding(0, 1)
+// Visible lists the labels currently shown and the position of the active one
+// among them. Panes draw their tab strip in their own border (see paneBox), so
+// this model holds the state and leaves the rendering to them — the hidden tabs
+// of the adaptive behavior are already filtered out here.
+func (m *Model) Visible() (labels []string, active int) {
+	labels = make([]string, 0, len(m.visible))
 
-	var parts []string
 	for _, idx := range m.visible {
-		if idx == m.active {
-			parts = append(parts, activeStyle.Render(m.labels[idx]))
-		} else {
-			parts = append(parts, normalStyle.Render(m.labels[idx]))
-		}
+		labels = append(labels, m.labels[idx])
 	}
 
-	return strings.Join(parts, "")
+	return labels, m.activeVisiblePos()
 }

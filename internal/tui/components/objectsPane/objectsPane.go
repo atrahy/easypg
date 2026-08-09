@@ -27,7 +27,8 @@ type Selection struct {
 }
 
 // ObjectsPane is the bottom-left navigation pane: an internal Table/View/Function
-// tab strip over a single list showing the objects of the active tab. It owns
+// tab strip — drawn by the caller in the pane's border — over a single list
+// showing the objects of the active tab. It owns
 // its own table and a unified selection model covering the three kinds, and
 // emits ObjectSelectedMsg whenever the selection changes.
 type ObjectsPane struct {
@@ -150,6 +151,12 @@ func (p *ObjectsPane) Filtering() bool {
 	return p.filter.Active()
 }
 
+// Position is the cursor's place in the active tab's list, for the pane's border
+// indicator.
+func (p *ObjectsPane) Position() (current, total int) {
+	return tableLayout.Position(p.table)
+}
+
 // SelectionEvent re-emits the selection message, for the moves that do not go
 // through Update (a search jumping the cursor, a refresh).
 func (p *ObjectsPane) SelectionEvent() tea.Cmd {
@@ -190,23 +197,20 @@ func (p *ObjectsPane) GetSelection() (Selection, bool) {
 }
 
 func (p *ObjectsPane) View() string {
-	// The tab strip is clamped to the pane width: in this narrow column it would
-	// otherwise wrap onto a second line and push the layout around.
-	strip := lipgloss.NewStyle().MaxWidth(p.width).Render(p.tabs.View())
+	return p.table.View()
+}
 
-	return lipgloss.JoinVertical(lipgloss.Left, strip, p.table.View())
+// Tabs is the pane's tab strip, which it does not draw itself: it is rendered in
+// the pane's border (see paneBox), where it costs no row of the list.
+func (p *ObjectsPane) Tabs() (labels []string, active int) {
+	return p.tabs.Visible()
 }
 
 func (p *ObjectsPane) SetSize(width, height int) {
 	p.width = width
 
-	listHeight := height - 1 // reserve one line for the tab header
-	if listHeight < 0 {
-		listHeight = 0
-	}
-
 	p.table.SetWidth(width)
-	p.table.SetHeight(listHeight)
+	p.table.SetHeight(max(height, 0))
 	p.table.SetColumns(getColumns(width, p.tabs.ActiveLabel()))
 }
 

@@ -99,6 +99,11 @@ func (s *SchemaTable) Filtering() bool {
 	return s.filter.Active()
 }
 
+// Position is the cursor's place in the list, for the pane's border indicator.
+func (s *SchemaTable) Position() (current, total int) {
+	return tableLayout.Position(s.table)
+}
+
 // SelectionEvent re-emits the selection message, for the moves that do not go
 // through Update (a search jumping the cursor, a refresh).
 func (s *SchemaTable) SelectionEvent() tea.Cmd {

@@ -68,6 +68,12 @@ func (m *Model) Filtering() bool {
 	return m.filter.Active()
 }
 
+// Position is the cursor's place in the list, for the detail pane's border
+// indicator.
+func (m *Model) Position() (current, total int) {
+	return tableLayout.Position(m.table)
+}
+
 // SelectedDetail returns the highlighted constraint's full definition, for the
 // detail pane's inspector strip.
 func (m *Model) SelectedDetail() string {

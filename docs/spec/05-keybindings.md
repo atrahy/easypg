@@ -63,6 +63,11 @@ Focus **cycles** through the three panes; it does not move geometrically.
 | `shift+tab` / `h` / `←` | Previous pane |
 | `1` / `2` / `3` | Jump straight to schema / objects / detail |
 
+Each pane advertises its own digit as a `[n]` badge in its top border, next to
+the tab strip `[` / `]` cycles through (see
+[01 — pane chrome](./01-definition-tab.md)), so both jumps are learned from the
+layout instead of from this table.
+
 `h`/`l` are aliases of `shift+tab`/`tab` rather than "go left"/"go right": with
 schema and objects stacked in the same column, a directional model would make
 half the presses no-ops and leave the vertical move keyless.

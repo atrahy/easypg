@@ -10,6 +10,7 @@ import (
 	"github.com/atrahy/easypg/internal/tui/components/helpPane"
 	"github.com/atrahy/easypg/internal/tui/components/objectsPane"
 	"github.com/atrahy/easypg/internal/tui/components/overlay"
+	"github.com/atrahy/easypg/internal/tui/components/paneBox"
 	"github.com/atrahy/easypg/internal/tui/components/schemaTable"
 	"github.com/atrahy/easypg/internal/tui/components/search"
 	"github.com/atrahy/easypg/internal/tui/components/searchBar"
@@ -42,6 +43,15 @@ const (
 )
 
 var paneNames = [...]string{"Schema", "Objects", "Detail"}
+
+// paneShortcuts is the key each pane advertises as a "[n]" badge in its top
+// border. Read from the keymap rather than hardcoded, so the badge can never
+// promise a key that does something else.
+var paneShortcuts = [...]key.Binding{
+	keys.Default.PaneSchema,
+	keys.Default.PaneObjects,
+	keys.Default.PaneDetail,
+}
 
 // mode is the *prompt* state: while one is open it owns the keyboard, so no key
 // may reach the panes or the global handler. What "/" opens depends on the
@@ -632,15 +642,15 @@ func (t definitionTabModel) View() string {
 // zoomed.
 func (t definitionTabModel) layoutView() string {
 	if t.zoomed {
-		return t.styleFor(t.focus, t.zoomWidth, t.zoomHeight).Render(t.focusedView())
+		return t.boxFor(t.focus, t.zoomWidth, t.zoomHeight).Render(t.focusedView())
 	}
 
 	left := lipgloss.JoinVertical(
 		lipgloss.Top,
-		t.styleFor(paneSchema, t.leftWidth, t.schemaHeight).Render(t.schemaTile.View()),
-		t.styleFor(paneObjects, t.leftWidth, t.objectsHeight).Render(t.objectsPane.View()),
+		t.boxFor(paneSchema, t.leftWidth, t.schemaHeight).Render(t.schemaTile.View()),
+		t.boxFor(paneObjects, t.leftWidth, t.objectsHeight).Render(t.objectsPane.View()),
 	)
-	right := t.styleFor(paneDetail, t.rightWidth, t.detailHeight).Render(t.detailPane.View())
+	right := t.boxFor(paneDetail, t.rightWidth, t.detailHeight).Render(t.detailPane.View())
 
 	return lipgloss.JoinHorizontal(lipgloss.Left, left, right)
 }
@@ -853,17 +863,60 @@ func (t *definitionTabModel) maybeFetchFunctions() tea.Cmd {
 	return t.fetchFunctions(t.currentSchema)
 }
 
-func (t definitionTabModel) styleFor(target pane, width, height int) lipgloss.Style {
-	base := lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		Border(lipgloss.RoundedBorder(), true)
+// boxFor is the frame of a pane: its shortcut and title in the top border, its
+// cursor position in the bottom one. It costs the same 2 columns and 2 lines the
+// plain border did, so the sizing above is unaffected.
+func (t definitionTabModel) boxFor(target pane, width, height int) paneBox.Box {
+	current, total := t.panePosition(target)
+	labels, active := t.paneTabs(target)
 
-	if target == t.focus {
-		return base.BorderForeground(lipgloss.Color("63"))
+	return paneBox.Box{
+		Title:     paneNames[target],
+		Context:   t.paneContext(target),
+		Tabs:      labels,
+		ActiveTab: active,
+		Shortcut:  paneShortcuts[target].Help().Key,
+		Current:   current,
+		Total:     total,
+		Width:     width,
+		Height:    height,
+		Focused:   target == t.focus,
+	}
+}
+
+// paneTabs is the tab strip a pane draws in its border. The two panes that have
+// one show it there instead of on a line of their own; the schema pane has none.
+func (t definitionTabModel) paneTabs(target pane) (labels []string, active int) {
+	switch target {
+	case paneObjects:
+		return t.objectsPane.Tabs()
+	case paneDetail:
+		return t.detailPane.Tabs()
+	default:
+		return nil, 0
+	}
+}
+
+// paneContext qualifies the name of the pane that has no tabs to show instead:
+// the schema pane says which schema everything below it is about.
+func (t definitionTabModel) paneContext(target pane) string {
+	if target == paneSchema {
+		return t.currentSchema
 	}
 
-	return base
+	return ""
+}
+
+// panePosition is the "x/total" a pane shows in its bottom border.
+func (t definitionTabModel) panePosition(target pane) (current, total int) {
+	switch target {
+	case paneObjects:
+		return t.objectsPane.Position()
+	case paneDetail:
+		return t.detailPane.Position()
+	default:
+		return t.schemaTile.Position()
+	}
 }
 
 func clampZero(v int) int {

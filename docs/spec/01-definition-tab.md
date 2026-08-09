@@ -161,3 +161,97 @@ targets, selection), the error still taking precedence in red. SQL-specific keys
 `schemaTable`, `objectsPane`, `columnTile`, `indexTile`, `constraintTile`,
 `sqlTile`, `detailPane`, `definitionTab.go`; `go.mod` (`charmbracelet/x/ansi`
 promoted from indirect to direct dependency).
+
+---
+
+## Design — pane chrome (iteration B7)
+
+The three panes were framed by an anonymous rounded border: nothing said what a
+pane held, how far down its list the cursor sat, or that `1`/`2`/`3` jump
+straight to one. The digits are bound and listed in `?`
+([05](./05-keybindings.md)), but a key you only discover by opening the help is a
+key most users never press. Meanwhile each tabbed pane spent one of its content
+rows on a `[ Table | View | Function ]` strip.
+
+lazygit answers all of it in the border itself, and that is what this iteration
+does — the pane's identity and its tab strip in the top edge, its position in the
+bottom one:
+
+```
+╭─ [1] Schema · public ─────╮ ╭─ [3] Detail ─ Column | Index | Constraints | SQL ─╮
+│ Name         Description  │ │ id           bigint                              │
+│ public                    │ │ email        text                                │
+╰──────────────────── 2/7 ──╯ ╰────────────────────────────────────────── 1/9 ───╯
+╭─ [2] Objects ─ Table | View | Function ─╮
+│ users        table                      │
+│ orders       table                      │
+╰─────────────────────────────── 3/12 ────╯
+```
+
+The border is the only place all of this goes for free. A header line costs one
+row of content **per pane**, on a layout where the left column already splits ~6
+rows of schema against everything else and where the detail pane spends 4 more on
+its inspector strip — and it cost exactly that until now, since the tab strip was
+such a line. Moving it into the border **gives a row back** to the objects and
+detail panes; the border was already drawn, and it was empty.
+
+### What the top edge holds
+
+- **`[n]` badge**, the digit that focuses the pane, read from the keymap's
+  `PaneSchema`/`PaneObjects`/`PaneDetail` bindings rather than hardcoded — same
+  rule as the footer and the overlay, so a rebinding can never leave the border
+  advertising a key that does something else.
+- **The pane's name**, then either its **tab strip** (objects, detail) with the
+  active tab highlighted the way a selected row is, or a **context** for the pane
+  that has no tabs: `Schema · public` names the schema everything below is about.
+- The strip is drawn from the pane's `tabs.Model` through `Visible()`, so the
+  adaptive behavior still holds: a view shows `Column | SQL`, a function `SQL`
+  alone, and the border shows exactly what `[` / `]` will cycle through.
+
+Both the badge and the active tab **follow the focus** (accent when focused, dim
+otherwise) rather than staying lit everywhere: three permanently colored badges
+and three highlighted tabs compete with the border color for "where am I", which
+is the one thing the chrome must answer at a glance.
+
+### The bottom edge
+
+**`x/total` position**, bottom right: which row of how many. Rows hidden by a
+filter are *excluded* from the total — the indicator describes what is on screen,
+and it doubles as the confirmation that a filter is narrowing the pane.
+
+### Two rules that fall out of it
+
+**Narrow panes degrade, never truncate.** The left column is a third of the
+terminal, so `[2] Objects ─ Table | View | Function` will not always fit. The
+caption is dropped in stages — the pane's name first (the badge already
+identifies it, while the tabs are the only place the `[` / `]` targets are
+visible), then all tabs but the active one, then everything but the badge —
+instead of being cut mid-word, which reads as corrupted output rather than as a
+shortened title. The pane with a context drops it first, then its name.
+
+**The SQL tab shows no position at all.** A list has a cursor, so `3/12` answers
+"where am I" even when all twelve rows fit; a text view has only a scroll offset,
+which the tile already reports as a `↕ %` in its own status line, right where the
+keys that move it (`w`, the horizontal scroll) are documented. A second, redundant
+indicator in the border would say the same thing in another unit.
+
+### Implementation note
+
+lipgloss v1 has no border-title support, so `paneBox` builds the frame itself:
+the content is rendered borderless (`Width`/`Height`, plus `MaxHeight` so
+over-tall content is cut instead of pushing the bottom edge out of the layout)
+and the four sides are added around it, the horizontal ones splicing their label
+into the fill. Widths are measured with `ansi.StringWidth`, since both labels are
+styled.
+
+The frame itself still costs 2 columns and 2 lines, so `definitionTab.updateSize`
+is untouched; what changes is *inside* the two tabbed panes, which stop reserving
+a row for their strip (`tabs.Model.View()` is gone, and with it the only place
+those labels were rendered).
+
+**Files**: new `internal/tui/components/paneBox/paneBox.go`;
+`tableLayout.Position` + a `Position()` on `schemaTable`, `objectsPane`,
+`columnTile`, `indexTile`, `constraintTile`, `detailPane`;
+`tabs` (`View()` → `Visible()`), `objectsPane`/`detailPane` (strip
+removed from `View`/`updateSize`, `Tabs()` exposed); `definitionTab.go`
+(`styleFor` → `boxFor`).

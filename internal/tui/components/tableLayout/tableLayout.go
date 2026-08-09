@@ -56,6 +56,19 @@ func Fit(width int, specs []Spec) []table.Column {
 	return columns
 }
 
+// Position is the 1-based cursor position and row count of a table, for the
+// position indicator a pane draws in its bottom border. Rows hidden by a filter
+// are excluded, since the indicator describes what is on screen; an empty table
+// reports 0/0, which callers render as no indicator at all.
+func Position(t table.Model) (current, total int) {
+	total = len(t.Rows())
+	if total == 0 {
+		return 0, 0
+	}
+
+	return min(t.Cursor()+1, total), total
+}
+
 // grow hands the leftover width to the weighted columns, the rounding remainder
 // going to the last one so the columns add up to the full pane width.
 func grow(widths []int, specs []Spec, extra, totalWeight int) {

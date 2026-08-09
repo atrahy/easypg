@@ -25,13 +25,10 @@ const (
 )
 
 const (
-	tabHeaderHeight = 1
-
 	// inspectorLines is how many wrapped lines the inspector strip shows of the
 	// selected row; +1 for its top border.
 	inspectorLines  = 3
 	inspectorHeight = inspectorLines + 1
-
 
 	// wrapBreakpoints are the SQL punctuation characters the inspector may wrap
 	// on, on top of spaces.
@@ -39,8 +36,9 @@ const (
 )
 
 // DetailPane is the right-hand pane: an internal Column/Index/Constraints/SQL
-// tab strip over the matching tile. The visible tabs adapt to the object type
-// (a view exposes columns + SQL, a function only SQL).
+// tab strip — drawn by the caller in the pane's border — over the matching tile.
+// The visible tabs adapt to the object type (a view exposes columns + SQL, a
+// function only SQL).
 //
 // Table cells are necessarily truncated, so the tabular tabs sit above an
 // inspector strip spelling out the selected row in full (a whole CREATE INDEX
@@ -144,12 +142,8 @@ func (p *DetailPane) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (p *DetailPane) View() string {
-	// The tab strip is clamped to the pane width: it would otherwise wrap onto a
-	// second line on a narrow terminal and push the layout around.
-	strip := lipgloss.NewStyle().MaxWidth(p.width).Render(p.tabs.View())
-
 	if p.tabs.ActiveLabel() == tabSQL {
-		return lipgloss.JoinVertical(lipgloss.Left, strip, p.sqlView.View())
+		return p.sqlView.View()
 	}
 
 	var body, detail string
@@ -164,10 +158,16 @@ func (p *DetailPane) View() string {
 	}
 
 	if !p.inspectorOpen {
-		return lipgloss.JoinVertical(lipgloss.Left, strip, body)
+		return body
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, strip, body, p.inspectorView(detail))
+	return lipgloss.JoinVertical(lipgloss.Left, body, p.inspectorView(detail))
+}
+
+// Tabs is the pane's tab strip, which it does not draw itself: it is rendered in
+// the pane's border (see paneBox), where it costs no row of the tile.
+func (p *DetailPane) Tabs() (labels []string, active int) {
+	return p.tabs.Visible()
 }
 
 // isInspectorToggle reports whether msg is the fold key, pressed on a tab that
@@ -208,6 +208,22 @@ func (p *DetailPane) CopyValue() string {
 		return p.constraints.SelectedDetail()
 	default:
 		return p.columns.SelectedDetail()
+	}
+}
+
+// Position is the active tile's cursor over its row count, for the pane's border
+// indicator. The SQL tab reports nothing: it has no cursor, only a scroll
+// offset, and the tile already spells that out as a "↕ %" in its status line.
+func (p *DetailPane) Position() (current, total int) {
+	switch p.tabs.ActiveLabel() {
+	case tabIndex:
+		return p.indexes.Position()
+	case tabConstraint:
+		return p.constraints.Position()
+	case tabSQL:
+		return 0, 0
+	default:
+		return p.columns.Position()
 	}
 }
 
@@ -285,20 +301,21 @@ func (p *DetailPane) SetSize(width, height int) {
 	p.updateSize()
 }
 
-// updateSize splits the pane height between the tab strip, the active tile and
-// (for the tabular tabs only, when unfolded) the inspector strip.
+// updateSize splits the pane height between the active tile and (for the tabular
+// tabs only, when unfolded) the inspector strip. The tab strip takes nothing: it
+// is drawn in the pane's border.
 func (p *DetailPane) updateSize() {
 	strip := 0
 	if p.inspectorOpen {
 		strip = inspectorHeight
 	}
 
-	tileHeight := max(p.height-tabHeaderHeight-strip, 0)
+	tileHeight := max(p.height-strip, 0)
 
 	p.columns.SetSize(p.width, tileHeight)
 	p.indexes.SetSize(p.width, tileHeight)
 	p.constraints.SetSize(p.width, tileHeight)
-	p.sqlView.SetSize(p.width, max(p.height-tabHeaderHeight, 0))
+	p.sqlView.SetSize(p.width, max(p.height, 0))
 }
 
 // wrapClamp word-wraps text to width and keeps at most maxLines lines, marking
