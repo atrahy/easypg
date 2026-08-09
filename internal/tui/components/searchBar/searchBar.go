@@ -3,9 +3,9 @@
 package searchBar
 
 import (
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // statusReserve is the room kept on the right for the indicator. It is a fixed
@@ -64,7 +64,7 @@ func (m *Model) layout() {
 	// before the status.
 	available := m.width - lipgloss.Width(m.input.Prompt) - statusReserve - 3
 
-	m.input.Width = max(available, 1)
+	m.input.SetWidth(max(available, 1))
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {

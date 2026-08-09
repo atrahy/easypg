@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atrahy/easypg/internal/tui/components/textView"
 	"github.com/atrahy/easypg/internal/tui/keys"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // statusHeight is the line the tile reserves for its own status/keys hint.
@@ -38,7 +38,7 @@ func (m *Model) Content() string {
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok && key.Matches(keyMsg, keys.Default.Wrap) {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, keys.Default.Wrap) {
 		m.text.ToggleWrap()
 
 		return nil
@@ -91,9 +91,9 @@ func (m *Model) statusView() string {
 		parts = append(parts, "w: wrap off")
 
 		if m.text.CanScrollHorizontally() {
-			hint := keys.Default.ScrollRight.Help().Key
+			hint := keys.Default.ScrollHorizontalHint().Help()
 
-			parts = append(parts, fmt.Sprintf("%s: scroll  ↔ %d%%", hint, percent(m.text.HorizontalScrollPercent())))
+			parts = append(parts, fmt.Sprintf("%s: %s  ↔ %d%%", hint.Key, hint.Desc, percent(m.text.HorizontalScrollPercent())))
 		}
 	}
 

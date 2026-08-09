@@ -1,34 +1,29 @@
-// Package textView is the scrollable read-only text component shared by the SQL
-// tile and the help overlay: soft wrapping, horizontal scrolling when wrapping
-// is off, and "/" search with highlighted matches.
+// Package textView is the scrollable read-only text component behind the SQL
+// tile: soft wrapping, horizontal scrolling when wrapping is off, and "/" search
+// with highlighted matches.
+//
+// Since the v2 migration ([06](docs/spec/06-charm-v2.md)) the viewport does all
+// three natively, so what is left here is the bookkeeping it keeps to itself:
+// the match ranges and which one the cursor is on, for the prompt's "3/17".
 package textView
 
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atrahy/easypg/internal/tui/components/search"
 	"github.com/atrahy/easypg/internal/tui/keys"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
-const (
-	// horizontalStep is how many columns the horizontal scroll keys move when
-	// wrapping is off; the viewport cuts long lines instead of wrapping them, so
-	// without this the right-hand side of a long line is unreachable.
-	horizontalStep = 8
-
-	// continuationIndent prefixes the extra lines produced by wrapping, so a
-	// wrapped line stays visually distinct from a real line break.
-	continuationIndent = "    "
-
-	// wrapBreakpoints are the punctuation characters a wrapped line may be
-	// broken on, on top of spaces (chosen for SQL).
-	wrapBreakpoints = ",()"
-)
+// horizontalStep is how many columns the horizontal scroll keys move when
+// wrapping is off; the viewport cuts long lines instead of wrapping them, so
+// without this the right-hand side of a long line is unreachable. It is inert
+// while soft wrap is on, which the viewport enforces itself.
+const horizontalStep = 8
 
 var (
 	// Every match is highlighted; the one the cursor sits on gets a distinct
@@ -47,24 +42,29 @@ type Model struct {
 	viewport viewport.Model
 
 	content     string
-	wrap        bool
 	longestLine int
 
-	// lines is the rendered content (after wrapping), which is what search and
-	// scrolling work on.
-	lines  []string
-	query  string
-	cursor search.Cursor
+	// matches are the byte ranges of the current query in content. The viewport
+	// highlights them and holds the selected one in an unexported field, so the
+	// index is mirrored here for the "3/17" counter.
+	matches [][]int
+	current int
+
+	// origin is the scroll offset the search started from, restored by
+	// CancelSearch; active tells whether there is one to restore.
+	origin int
+	active bool
 }
 
 func New() *Model {
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 	vp.KeyMap = keys.ViewportKeyMap(keys.Default)
+	vp.SoftWrap = true
+	vp.HighlightStyle = highlightStyle
+	vp.SelectedHighlightStyle = currentHighlightStyle
+	vp.SetHorizontalStep(horizontalStep)
 
-	m := &Model{viewport: vp, wrap: true}
-	m.applyWrapMode()
-
-	return m
+	return &Model{viewport: vp}
 }
 
 func (m *Model) SetContent(content string) {
@@ -75,24 +75,20 @@ func (m *Model) SetContent(content string) {
 		m.longestLine = max(m.longestLine, ansi.StringWidth(line))
 	}
 
-	m.cursor.Reset()
-	m.query = ""
+	m.dropSearch()
 
-	m.render()
+	m.viewport.SetContent(content)
 	m.viewport.GotoTop()
 	m.viewport.SetXOffset(0)
 }
 
 func (m *Model) SetSize(width, height int) {
-	m.viewport.Width = width
-	m.viewport.Height = max(height, 0)
-
-	// Wrapping is width-dependent, so the content has to be rebuilt on resize.
-	m.render()
+	m.viewport.SetWidth(width)
+	m.viewport.SetHeight(max(height, 0))
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		// The viewport has no top/bottom bindings of its own.
 		switch {
 		case key.Matches(keyMsg, keys.Default.Top):
@@ -116,22 +112,20 @@ func (m *Model) View() string {
 }
 
 func (m *Model) Wrap() bool {
-	return m.wrap
+	return m.viewport.SoftWrap
 }
 
 // ToggleWrap flips soft wrapping and resets the horizontal offset, which is
 // meaningless once the content wraps.
 func (m *Model) ToggleWrap() {
-	m.wrap = !m.wrap
-	m.applyWrapMode()
-	m.render()
+	m.viewport.SoftWrap = !m.viewport.SoftWrap
 	m.viewport.SetXOffset(0)
 }
 
 // CanScrollHorizontally reports whether anything is currently off-screen to the
 // right, so callers only advertise the keys when they do something.
 func (m *Model) CanScrollHorizontally() bool {
-	return !m.wrap && m.longestLine > m.viewport.Width
+	return !m.viewport.SoftWrap && m.longestLine > m.viewport.Width()
 }
 
 func (m *Model) ScrollPercent() float64 {
@@ -148,26 +142,45 @@ func (m *Model) Scrollable() bool {
 }
 
 func (m *Model) Width() int {
-	return m.viewport.Width
+	return m.viewport.Width()
 }
 
-// Search moves to the first matching line and highlights every match.
+// Search highlights every occurrence of query and moves to the first one.
+//
+// It deliberately anchors at the top of the content: the viewport selects the
+// first match at or after the current scroll position, and its notion of "line"
+// is post-wrapping, which we no longer compute — scrolling to the top first is
+// what keeps the counter below in step with what is highlighted.
 func (m *Model) Search(query string) int {
-	m.query = query
+	if query == "" {
+		m.clearMatches()
 
-	target, count := m.cursor.Apply(m.lines, query, m.viewport.YOffset)
+		return 0
+	}
 
-	m.render()
-	m.revealLine(target)
+	if !m.active {
+		m.origin, m.active = m.viewport.YOffset(), true
+	}
 
-	return count
+	m.matches, m.current = matchRanges(m.content, query), 0
+
+	if len(m.matches) == 0 {
+		m.viewport.ClearHighlights()
+		m.viewport.SetYOffset(m.origin)
+
+		return 0
+	}
+
+	m.viewport.GotoTop()
+	m.viewport.SetHighlights(m.matches)
+
+	return len(m.matches)
 }
 
 func (m *Model) CancelSearch() {
-	origin, active := m.cursor.Cancel()
-	m.query = ""
+	origin, active := m.origin, m.active
 
-	m.render()
+	m.dropSearch()
 
 	if active {
 		m.viewport.SetYOffset(origin)
@@ -175,138 +188,67 @@ func (m *Model) CancelSearch() {
 }
 
 func (m *Model) NextMatch() {
-	if target, ok := m.cursor.Next(); ok {
-		// Re-rendered so the "current match" color moves with the cursor.
-		m.render()
-		m.revealLine(target)
+	if len(m.matches) == 0 {
+		return
 	}
+
+	m.current = (m.current + 1) % len(m.matches)
+	m.viewport.HighlightNext()
 }
 
 func (m *Model) PrevMatch() {
-	if target, ok := m.cursor.Prev(); ok {
-		m.render()
-		m.revealLine(target)
+	if len(m.matches) == 0 {
+		return
 	}
+
+	m.current = (m.current - 1 + len(m.matches)) % len(m.matches)
+	m.viewport.HighlightPrevious()
 }
 
 func (m *Model) MatchPosition() (current, total int) {
-	return m.cursor.Position()
+	if len(m.matches) == 0 {
+		return 0, 0
+	}
+
+	return m.current + 1, len(m.matches)
 }
 
-// revealLine scrolls only when the line is off-screen, so walking matches does
-// not shuffle the view around for nothing.
-func (m *Model) revealLine(line int) {
-	if line < m.viewport.YOffset || line >= m.viewport.YOffset+m.viewport.Height {
-		m.viewport.SetYOffset(line)
-	}
+// clearMatches drops the highlights but keeps the origin, so a query emptied
+// mid-search can still be cancelled back to where it started.
+func (m *Model) clearMatches() {
+	m.matches, m.current = nil, 0
+	m.viewport.ClearHighlights()
 }
 
-// applyWrapMode enables the viewport's horizontal scrolling only when wrapping
-// is off; wrapped content never overflows, so the keys would be a no-op there.
-func (m *Model) applyWrapMode() {
-	if m.wrap {
-		m.viewport.SetHorizontalStep(0)
-		return
-	}
-
-	m.viewport.SetHorizontalStep(horizontalStep)
+func (m *Model) dropSearch() {
+	m.clearMatches()
+	m.origin, m.active = 0, false
 }
 
-// render rebuilds the displayed lines from the raw content: wrapping first (so
-// line indices match what is on screen, including for search), then match
-// highlighting.
-func (m *Model) render() {
-	if m.wrap {
-		m.lines = wrapLines(m.content, m.viewport.Width)
-	} else {
-		m.lines = strings.Split(m.content, "\n")
-	}
-
-	if m.query == "" {
-		m.viewport.SetContent(strings.Join(m.lines, "\n"))
-		return
-	}
-
-	current, hasCurrent := m.cursor.Current()
-
-	shown := make([]string, len(m.lines))
-
-	for i, line := range m.lines {
-		style := highlightStyle
-		if hasCurrent && i == current {
-			style = currentHighlightStyle
-		}
-
-		shown[i] = highlight(line, m.query, style)
-	}
-
-	m.viewport.SetContent(strings.Join(shown, "\n"))
-}
-
-// wrapLines soft-wraps each line to width, indenting the continuations. It wraps
-// line by line (rather than handing the whole block to ansi.Wrap) so the indent
-// applies only to the breaks wrapping introduced.
-func wrapLines(content string, width int) []string {
-	lines := strings.Split(content, "\n")
-
-	limit := width - len(continuationIndent)
-	if limit < 1 {
-		return lines
-	}
-
-	wrapped := make([]string, 0, len(lines))
-
-	for _, line := range lines {
-		if ansi.StringWidth(line) <= width {
-			wrapped = append(wrapped, line)
-			continue
-		}
-
-		for i, segment := range strings.Split(ansi.Wrap(line, limit, wrapBreakpoints), "\n") {
-			if i > 0 {
-				segment = continuationIndent + segment
-			}
-
-			wrapped = append(wrapped, segment)
-		}
-	}
-
-	return wrapped
-}
-
-// highlight styles every occurrence of query in line with the given style,
-// honoring the same smart case rule as the search itself.
-func highlight(line, query string, style lipgloss.Style) string {
-	if !search.Matches(line, query) {
-		return line
-	}
-
-	haystack, needle := line, query
+// matchRanges lists the byte ranges of query in content, honoring the smart case
+// rule — the viewport highlights by byte offset into the content it was given.
+func matchRanges(content, query string) [][]int {
+	haystack, needle := content, query
 	if !search.CaseSensitive(query) {
-		haystack, needle = strings.ToLower(line), strings.ToLower(query)
+		haystack, needle = strings.ToLower(content), strings.ToLower(query)
 	}
 
-	// Byte offsets are shared between line and haystack; lowercasing changes the
-	// byte length for a few exotic runes, in which case highlighting is skipped
-	// rather than slicing at the wrong offsets.
-	if len(haystack) != len(line) || len(needle) != len(query) {
-		return line
+	// Lowercasing changes the byte length of a few exotic runes, which would
+	// shift every offset; skip the search rather than highlight the wrong spans.
+	if needle == "" || len(haystack) != len(content) || len(needle) != len(query) {
+		return nil
 	}
 
-	var b strings.Builder
+	var ranges [][]int
 
 	for offset := 0; ; {
 		idx := strings.Index(haystack[offset:], needle)
 		if idx < 0 {
-			b.WriteString(line[offset:])
-			break
+			return ranges
 		}
 
 		start := offset + idx
-		b.WriteString(line[offset:start])
-		b.WriteString(style.Render(line[start : start+len(needle)]))
+		ranges = append(ranges, []int{start, start + len(needle)})
 		offset = start + len(needle)
 	}
-
-	return b.String()
 }

@@ -3,6 +3,9 @@ package detailPane
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atrahy/easypg/internal/sql"
 	"github.com/atrahy/easypg/internal/tui/components/columnTile"
 	"github.com/atrahy/easypg/internal/tui/components/constraintTile"
@@ -11,9 +14,6 @@ import (
 	"github.com/atrahy/easypg/internal/tui/components/sqlTile"
 	"github.com/atrahy/easypg/internal/tui/components/tabs"
 	"github.com/atrahy/easypg/internal/tui/keys"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -174,7 +174,7 @@ func (p *DetailPane) Tabs() (labels []string, active int) {
 // actually has an inspector strip (the key stays inert on the SQL tab rather
 // than silently flipping an invisible state).
 func (p *DetailPane) isInspectorToggle(msg tea.Msg) bool {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 
 	return ok && key.Matches(keyMsg, keys.Default.Inspector) && p.tabs.ActiveLabel() != tabSQL
 }

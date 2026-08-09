@@ -4,7 +4,7 @@
 // minimum width and a growth weight and lets Fit distribute the pane width.
 package tableLayout
 
-import "github.com/charmbracelet/bubbles/table"
+import "charm.land/bubbles/v2/table"
 
 const (
 	// cellPadding is the horizontal padding bubbles/table adds around every

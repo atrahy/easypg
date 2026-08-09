@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/atrahy/easypg/internal/sql"
 	"github.com/atrahy/easypg/internal/tui"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
@@ -33,7 +33,9 @@ func main() {
 	}
 	defer db.Close()
 
-	p := tea.NewProgram(tui.NewModel(db), tea.WithAltScreen())
+	// Alt-screen is not a program option anymore: the root model declares it on
+	// every frame through its tea.View.
+	p := tea.NewProgram(tui.NewModel(db))
 
 	if _, err = p.Run(); err != nil {
 		fmt.Printf("Tea error: %v\n", err)

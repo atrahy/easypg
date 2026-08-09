@@ -7,11 +7,11 @@ package helpPane
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atrahy/easypg/internal/tui/components/search"
 	"github.com/atrahy/easypg/internal/tui/keys"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 const (
@@ -114,7 +114,7 @@ func (m *Model) SetSize(screenWidth, screenHeight int) {
 }
 
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return nil
 	}

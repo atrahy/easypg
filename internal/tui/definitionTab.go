@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"log"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
 	"github.com/atrahy/easypg/internal/sql"
 	"github.com/atrahy/easypg/internal/tui/components/detailPane"
@@ -15,9 +18,6 @@ import (
 	"github.com/atrahy/easypg/internal/tui/components/search"
 	"github.com/atrahy/easypg/internal/tui/components/searchBar"
 	"github.com/atrahy/easypg/internal/tui/keys"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // schemaVisibleRows is the (content) row count of the compact schema pane in the
@@ -133,7 +133,7 @@ func (t definitionTabModel) CapturesInput() bool {
 //	objectsPane.ObjectSelectedMsg     -> fetchTableAttr/fetchFunctionDef -> tableAttr/functionDef -> detailPane.Set{Items,FunctionDef}
 //
 // Add new drill-down levels by extending this same chain.
-func (t definitionTabModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (t definitionTabModel) Update(msg tea.Msg) (tab, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	log.Printf("msg received: %T : %v", msg, msg)
@@ -143,7 +143,7 @@ func (t definitionTabModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.width, t.height = msg.Width, msg.Height
 		t.updateSize()
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return t.handleKey(msg)
 
 	case schemaList:
@@ -204,7 +204,7 @@ func (t definitionTabModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKey routes a key press by mode: the search prompt first, then the help
 // overlay, then the normal bindings. Nothing falls through between them.
-func (t definitionTabModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (t definitionTabModel) handleKey(msg tea.KeyPressMsg) (tab, tea.Cmd) {
 	t.notice = ""
 
 	switch {
@@ -217,7 +217,7 @@ func (t definitionTabModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (t definitionTabModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (t definitionTabModel) handleNormalKey(msg tea.KeyPressMsg) (tab, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Default.Help):
 		t.openHelp()
@@ -308,7 +308,7 @@ func (t definitionTabModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 // keystroke. The cascading fetches (a schema move reloading the objects) are
 // deliberately *not* triggered while typing — only on confirm/cancel — so an
 // incremental search does not fire a query per character.
-func (t definitionTabModel) handlePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (t definitionTabModel) handlePromptKey(msg tea.KeyPressMsg) (tab, tea.Cmd) {
 	filtering := t.mode == modeFilter
 
 	switch {
@@ -402,7 +402,7 @@ func (t *definitionTabModel) clearFilter() {
 
 // handleHelpKey drives the overlay: it closes on esc/q/?, runs the highlighted
 // binding on enter, and otherwise scrolls or filters its own list.
-func (t definitionTabModel) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (t definitionTabModel) handleHelpKey(msg tea.KeyPressMsg) (tab, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Default.Help, keys.Default.Cancel, keys.Default.Quit):
 		t.closeHelp()
@@ -425,7 +425,7 @@ func (t definitionTabModel) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // runSelectedBinding closes the overlay and replays the highlighted binding's
 // key, so the help executes commands through the very handlers it documents
 // instead of a parallel dispatch table.
-func (t definitionTabModel) runSelectedBinding() (tea.Model, tea.Cmd) {
+func (t definitionTabModel) runSelectedBinding() (tab, tea.Cmd) {
 	binding, ok := t.helpPane.SelectedBinding()
 	if !ok {
 		return t, nil

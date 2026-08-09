@@ -12,3 +12,16 @@ tasks:
     cmds:
       - go build ./...
       - go vet ./...
+
+  deps:
+    desc: Upgrade every dependency to its latest release, then tidy
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+
+  deps-outdated:
+    desc: List the dependencies that have a newer release
+    # go list marks an available upgrade with a [bracketed] version; without the
+    # filter the interesting lines are lost among the forty that are up to date.
+    cmds:
+      - go list -m -u all | grep '\[' || echo "all dependencies are up to date"

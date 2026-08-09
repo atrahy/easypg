@@ -3,7 +3,7 @@ package search
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/table"
+	"charm.land/bubbles/v2/table"
 )
 
 // TableFilter hides the rows of a bubbles/table that do not match a query. It

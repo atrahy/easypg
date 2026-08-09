@@ -186,6 +186,10 @@ scrolling a pane you can no longer see is meaningless.
 
 ---
 
+> Since the [Charm v2 migration](./06-charm-v2.md), a key matches through its
+> *text*: shifted bindings (`G`, `R`, `N`, `H`/`L`, `?`) arrive as the character
+> they produce, and the space bar is spelled `"space"` rather than `" "`.
+
 ## Conflicts to settle (and how)
 
 | Conflict | Resolution |

@@ -12,10 +12,10 @@ package keys
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/table"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 )
 
 type KeyMap struct {
@@ -176,6 +176,16 @@ func relabel(b key.Binding, desc string) key.Binding {
 	return key.NewBinding(key.WithKeys(b.Keys()...), key.WithHelp(b.Help().Key, desc))
 }
 
+// ScrollHorizontalHint merges ScrollLeft and ScrollRight into one display-only
+// entry: on a single status line the two directions read better together than as
+// two entries — and announcing only one of them, as the SQL tile used to, hides
+// half the command. It carries no keys, the same way ShortHelp merges j/k into
+// one "move" entry; the real bindings stay the two it describes, and the overlay
+// still lists them separately.
+func (k KeyMap) ScrollHorizontalHint() key.Binding {
+	return key.NewBinding(key.WithHelp("shift+←/→ H/L", "scroll"))
+}
+
 // FullHelp is the overlay content: everything that applies right now, grouped.
 func (k KeyMap) FullHelp(ctx Context) []Section {
 	paneBindings := []key.Binding{
@@ -217,49 +227,54 @@ func (k KeyMap) FullHelp(ctx Context) []Section {
 	}
 }
 
-// namedKeys maps the non-rune keys used above back to their bubbletea type, so
-// a binding selected in the help can be replayed as if it had been typed.
-var namedKeys = map[string]tea.KeyType{
-	"tab":         tea.KeyTab,
-	"shift+tab":   tea.KeyShiftTab,
-	"enter":       tea.KeyEnter,
-	"esc":         tea.KeyEsc,
-	"up":          tea.KeyUp,
-	"down":        tea.KeyDown,
-	"left":        tea.KeyLeft,
-	"right":       tea.KeyRight,
-	"shift+left":  tea.KeyShiftLeft,
-	"shift+right": tea.KeyShiftRight,
-	"pgup":        tea.KeyPgUp,
-	"pgdown":      tea.KeyPgDown,
-	"home":        tea.KeyHome,
-	"end":         tea.KeyEnd,
-	"ctrl+c":      tea.KeyCtrlC,
-	"ctrl+d":      tea.KeyCtrlD,
-	"ctrl+u":      tea.KeyCtrlU,
-	"ctrl+f":      tea.KeyCtrlF,
-	"ctrl+b":      tea.KeyCtrlB,
+// namedKeys maps the non-rune keys used above back to the press that produces
+// them, so a binding selected in the help can be replayed as if it had been
+// typed. A key is a rune code plus modifiers since v2 — there is no KeyType
+// enum, and a modified key is its base code with a Mod flag.
+var namedKeys = map[string]tea.KeyPressMsg{
+	"tab":         {Code: tea.KeyTab},
+	"shift+tab":   {Code: tea.KeyTab, Mod: tea.ModShift},
+	"enter":       {Code: tea.KeyEnter},
+	"esc":         {Code: tea.KeyEscape},
+	"up":          {Code: tea.KeyUp},
+	"down":        {Code: tea.KeyDown},
+	"left":        {Code: tea.KeyLeft},
+	"right":       {Code: tea.KeyRight},
+	"shift+left":  {Code: tea.KeyLeft, Mod: tea.ModShift},
+	"shift+right": {Code: tea.KeyRight, Mod: tea.ModShift},
+	"pgup":        {Code: tea.KeyPgUp},
+	"pgdown":      {Code: tea.KeyPgDown},
+	"home":        {Code: tea.KeyHome},
+	"end":         {Code: tea.KeyEnd},
+	"ctrl+c":      {Code: 'c', Mod: tea.ModCtrl},
+	"ctrl+d":      {Code: 'd', Mod: tea.ModCtrl},
+	"ctrl+u":      {Code: 'u', Mod: tea.ModCtrl},
+	"ctrl+f":      {Code: 'f', Mod: tea.ModCtrl},
+	"ctrl+b":      {Code: 'b', Mod: tea.ModCtrl},
 }
 
 // Synthesize rebuilds a key press from a binding's primary key. It lets the help
 // overlay run the selected entry by replaying its key through the normal
 // handlers, instead of maintaining a second dispatch table of commands.
-func Synthesize(b key.Binding) (tea.KeyMsg, bool) {
+func Synthesize(b key.Binding) (tea.KeyPressMsg, bool) {
 	if len(b.Keys()) == 0 {
-		return tea.KeyMsg{}, false
+		return tea.KeyPressMsg{}, false
 	}
 
 	name := b.Keys()[0]
 
-	if keyType, ok := namedKeys[name]; ok {
-		return tea.KeyMsg(tea.Key{Type: keyType}), true
+	if press, ok := namedKeys[name]; ok {
+		return press, true
 	}
 
+	// Text is what String() reports for a printable key, and what key.Matches
+	// compares against — so a synthesized "G" is indistinguishable from a typed
+	// one, without having to model the shift that produced it.
 	if runes := []rune(name); len(runes) == 1 {
-		return tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: runes}), true
+		return tea.KeyPressMsg{Code: runes[0], Text: name}, true
 	}
 
-	return tea.KeyMsg{}, false
+	return tea.KeyPressMsg{}, false
 }
 
 // RenderShort formats bindings as a single "key: description" line.

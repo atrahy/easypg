@@ -3,9 +3,9 @@ package tui
 import (
 	"log"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/atrahy/easypg/internal/sql"
 	"github.com/atrahy/easypg/internal/tui/components/objectsPane"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 type schemaList struct {

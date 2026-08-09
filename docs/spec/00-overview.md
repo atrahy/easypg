@@ -6,6 +6,7 @@ Spec index. See also:
 - [03 — Roadmap](./03-roadmap.md)
 - [04 — Backlog & technical debt](./04-backlog.md)
 - [05 — Keybindings, help overlay & search](./05-keybindings.md)
+- [06 — Charm v2 migration](./06-charm-v2.md)
 
 ## Vision
 

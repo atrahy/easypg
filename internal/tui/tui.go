@@ -1,11 +1,11 @@
 package tui
 
 import (
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atrahy/easypg/internal/sql"
 	"github.com/atrahy/easypg/internal/tui/keys"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // inputCapturer is implemented by tabs that can swallow every key press (a
@@ -22,8 +22,8 @@ type Model struct {
 
 	tabCursor tabCursor
 
-	definitionTab tea.Model
-	// editorTab     CustomModel
+	definitionTab tab
+	// editorTab     tab
 }
 
 func NewModel(db *sql.DBConnection) Model {
@@ -52,7 +52,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, keys.Default.ForceQuit):
 			return m, tea.Quit
@@ -69,12 +69,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) View() string {
+// View returns the frame *and* the terminal state it wants: since v2 the
+// alt-screen is declared here on every render instead of being switched on once
+// as a program option.
+func (m Model) View() tea.View {
 	var page = lipgloss.NewStyle().Width(m.width).Height(m.height)
 
 	currentTab := m.getCurrentTab()
 
-	return page.Render(currentTab.View())
+	view := tea.NewView(page.Render(currentTab.View()))
+	view.AltScreen = true
+
+	return view
 }
 
 func (m Model) capturesInput() bool {
@@ -83,7 +89,7 @@ func (m Model) capturesInput() bool {
 	return ok && capturer.CapturesInput()
 }
 
-func (m Model) getCurrentTab() tea.Model {
+func (m Model) getCurrentTab() tab {
 	switch m.tabCursor {
 	case definitionTab:
 		return m.definitionTab
