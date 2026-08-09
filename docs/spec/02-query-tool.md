@@ -1,12 +1,12 @@
-# Fonctionnalité 2 — Query Tool
+# Feature 2 — Query Tool
 
-Statut : pas commencé. Voir [l'index](./00-overview.md) pour la vision générale et les décisions d'architecture référencées ci-dessous.
+Status: not started. See [the index](./00-overview.md) for the overall vision and the architecture decisions referenced below.
 
-Un onglet séparé (le stub `editorTab` existe déjà dans `internal/tui/tab.go` mais n'est branché nulle part) avec deux panes :
+A separate tab (the `editorTab` stub already exists in `internal/tui/tab.go` but is not wired anywhere) with two panes:
 
-- **Pane éditeur** : édition de requêtes SQL avec bindings vim-like (a minima modes normal/insert, `hjkl`, `dd`/`yy`) — probablement `bubbles/textarea` étendu, ou intégration d'un mode vim existant pour bubbletea
-- **Pane résultats** : rendu tabulaire (réutilisation probable de `bubbles/table` comme les autres panneaux) avec scroll/pagination pour les résultats larges
-- **Exécution** : raccourci dédié (ex. `ctrl+enter`), affichage des erreurs SQL et du temps d'exécution
-- **Sessions** : modélisées en interne comme une liste (voir [Décisions d'architecture](./00-overview.md#décisions-darchitecture)), même si le MVP n'affiche qu'un seul onglet
-- **Résultats** : le composant garde les rows brutes en mémoire, pas seulement l'affichage formaté (préparation de l'export CSV)
-- **Historique** : persistant sur disque, format/emplacement à définir lors de la conception (Phase 2)
+- **Editor pane**: SQL query editing with vim-like bindings (at least normal/insert modes, `hjkl`, `dd`/`yy`) — probably an extended `bubbles/textarea`, or integrating an existing vim mode for bubbletea
+- **Results pane**: tabular rendering (likely reusing `bubbles/table` like the other panes) with scroll/pagination for large result sets
+- **Execution**: a dedicated shortcut (e.g. `ctrl+enter`), showing SQL errors and execution time
+- **Sessions**: modeled internally as a list (see [Architecture decisions](./00-overview.md#architecture-decisions)), even if the MVP shows a single tab
+- **Results**: the component keeps the raw rows in memory, not just the formatted display (in preparation for CSV export)
+- **History**: persisted to disk, format/location to be defined during design (Phase 2)

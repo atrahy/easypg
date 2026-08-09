@@ -1,33 +1,36 @@
-# EasyPG — Spec initiale
+# EasyPG — Initial Spec
 
-Index de la spec. Voir aussi :
+Spec index. See also:
 - [01 — Definition Tab](./01-definition-tab.md)
 - [02 — Query Tool](./02-query-tool.md)
 - [03 — Roadmap](./03-roadmap.md)
-- [04 — Backlog & dette technique](./04-backlog.md)
+- [04 — Backlog & technical debt](./04-backlog.md)
 
 ## Vision
 
-TUI de gestion PostgreSQL pensé comme une alternative légère à pgAdmin pour les usages courants (pas de couverture exhaustive), avec une UX inspirée de lazygit : navigation 100% clavier, panneaux contextuels avec focus cyclique, feedback immédiat, faible friction.
+A PostgreSQL management TUI designed as a lightweight alternative to pgAdmin for
+everyday use (not exhaustive coverage), with a lazygit-inspired UX: 100%
+keyboard navigation, contextual panes with cyclic focus, immediate feedback, low
+friction.
 
-## Non-objectifs (scope volontairement restreint)
+## Non-goals (intentionally narrow scope)
 
-- Pas de couverture complète pgAdmin (gestion fine des rôles/permissions, monitoring, backup/restore, réplication, etc.)
-- Pas d'édition de données en grille façon spreadsheet — l'outil reste orienté lecture + requêtes, pas UPDATE/INSERT via l'UI
-- Pas de support Windows pour l'instant (macOS/Linux uniquement)
+- No full pgAdmin coverage (fine-grained role/permission management, monitoring, backup/restore, replication, etc.)
+- No spreadsheet-style grid data editing — the tool stays read + query oriented, no UPDATE/INSERT through the UI
+- No Windows support for now (macOS/Linux only)
 
-## Décisions d'architecture
+## Architecture decisions
 
-Ces points étaient ouverts dans la v1 du spec ; ils sont tranchés maintenant pour éviter de refactorer des fonctionnalités déjà prévues :
+These points were open in the v1 spec; they are settled now to avoid refactoring features that are already planned:
 
-- **Connexions** : le multi-connexions est prévu dès l'architecture (registre de connexions nommées via config, à la manière dont lazygit gère plusieurs repos), même si dans l'immédiat une seule connexion est utilisée. Le DSN hardcodé de `main.go` doit être remplacé tôt par ce mécanisme plutôt que d'être patché une première fois en config simple puis re-refactoré ensuite.
-- **Query tool — sessions** : le multi-onglets (plusieurs requêtes ouvertes en parallèle, comme des onglets de navigateur) est un besoin confirmé mais pas prioritaire pour le MVP. Le state du query tool doit donc être modélisé comme une liste de sessions dès le départ, même si le MVP n'en affiche qu'une seule à l'écran — le multi-onglets sera de l'exploitation de ce modèle existant, pas un refactor.
-- **Historique de requêtes** : persistant sur disque (survit au redémarrage). Le format/emplacement de stockage doit être choisi dès la conception du query tool, pas ajouté après coup.
-- **Export des résultats (CSV)** : pas prioritaire pour le MVP, mais le composant résultats doit conserver les rows brutes en mémoire (pas seulement des strings déjà formatées pour l'affichage) dès sa conception, pour que l'export soit un ajout simple plus tard.
+- **Connections**: multi-connection support is baked into the architecture from the start (a registry of named connections via config, the way lazygit handles multiple repos), even though only a single connection is used for now. The hardcoded DSN in `main.go` should be replaced early by this mechanism rather than first patched into a simple config and then re-refactored later.
+- **Query tool — sessions**: multi-tab (several queries open in parallel, like browser tabs) is a confirmed need but not a priority for the MVP. The query tool state should therefore be modeled as a list of sessions from the start, even if the MVP only shows one on screen — multi-tab will build on this existing model, not require a refactor.
+- **Query history**: persisted to disk (survives a restart). The storage format/location must be chosen when designing the query tool, not bolted on afterwards.
+- **Result export (CSV)**: not a priority for the MVP, but the results component must keep the raw rows in memory (not just display-formatted strings) from its inception, so that export is a simple addition later.
 
-## Référence UX : lazygit
+## UX reference: lazygit
 
-- Panneaux multiples, focus cyclique au clavier (`tab`/`shift+tab`) — déjà en place dans `definitionTab`
-- Aucune interaction souris
-- Footer d'aide contextuelle listant les raccourcis du panneau focus — pas encore présent, à ajouter
-- Densité d'info élevée, pas de fioritures visuelles
+- Multiple panes, cyclic keyboard focus (`tab` / `shift+tab`) — already in place in `definitionTab`
+- No mouse interaction
+- Contextual help footer listing the focused pane's shortcuts — hand-written strings today, to be generated from the keymap of [05](./05-keybindings.md)
+- High information density, no visual frills
