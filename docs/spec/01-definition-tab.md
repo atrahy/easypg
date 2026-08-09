@@ -150,12 +150,20 @@ constant 4 lines.
   horizontal scroll % — each shown only when there is something off-screen in
   that direction.
 
+> Superseded: that line is gone, and the statement got its row back — the two
+> bottom lines of the tab report all of it (see
+> [05 — status bar](./05-keybindings.md#status-bar)).
+
 ### Footer
 
 The status line at the bottom of the tab showed the last error or nothing. It now
 falls back to a **contextual key hint** for the focused pane (pane cycling, `[`/`]`
 targets, selection), the error still taking precedence in red. SQL-specific keys
 (`w`, `←`/`→`) live in the SQL tile's own status line, where they apply.
+
+> Superseded: this line became two — a segmented
+> [status bar](./05-keybindings.md#status-bar) over a message line that keeps the
+> hints, the prompt and the errors. The SQL tile keeps its own status line.
 
 **Files**: new `internal/tui/components/tableLayout/tableLayout.go`;
 `schemaTable`, `objectsPane`, `columnTile`, `indexTile`, `constraintTile`,

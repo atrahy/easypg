@@ -74,6 +74,17 @@ func (m *Model) Position() (current, total int) {
 	return tableLayout.Position(m.table)
 }
 
+// SelectedName is the highlighted constraint's name, for the status bar's
+// context path.
+func (m *Model) SelectedName() string {
+	cursor := m.filter.SourceIndex(m.table.Cursor())
+	if cursor < 0 || cursor >= len(m.items) {
+		return ""
+	}
+
+	return m.items[cursor].Name
+}
+
 // SelectedDetail returns the highlighted constraint's full definition, for the
 // detail pane's inspector strip.
 func (m *Model) SelectedDetail() string {

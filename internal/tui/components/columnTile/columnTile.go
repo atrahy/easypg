@@ -77,6 +77,18 @@ func (m *Model) Position() (current, total int) {
 	return tableLayout.Position(m.table)
 }
 
+// SelectedName is the highlighted column's name alone, for the status bar's
+// context path — SelectedDetail spells out the whole row, which is too much
+// there.
+func (m *Model) SelectedName() string {
+	cursor := m.filter.SourceIndex(m.table.Cursor())
+	if cursor < 0 || cursor >= len(m.items) {
+		return ""
+	}
+
+	return m.items[cursor].Name
+}
+
 // SelectedDetail describes the highlighted column in full, for the detail pane's
 // inspector strip: the table cells are truncated, this is not.
 func (m *Model) SelectedDetail() string {

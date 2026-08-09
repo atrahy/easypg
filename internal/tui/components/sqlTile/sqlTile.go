@@ -1,23 +1,20 @@
 package sqlTile
 
 import (
-	"fmt"
-	"strings"
-
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/atrahy/easypg/internal/tui/components/textView"
 	"github.com/atrahy/easypg/internal/tui/keys"
 )
-
-// statusHeight is the line the tile reserves for its own status/keys hint.
-const statusHeight = 1
 
 // Model is a read-only, scrollable text tile used to show generated SQL/DDL.
 // Long statements (view definitions, function bodies, CHECK expressions) either
 // soft-wrap with an indent — the default — or stay on one line and scroll
 // horizontally, toggled with "w".
+//
+// It draws nothing but the statement: its position, its wrap state and the keys
+// that move it are reported by the tab's status bar and message line, so the
+// tile spends none of its height saying what the screen already says elsewhere.
 type Model struct {
 	text    *textView.Model
 	content string
@@ -48,11 +45,29 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) View() string {
-	return lipgloss.JoinVertical(lipgloss.Left, m.text.View(), m.statusView())
+	return m.text.View()
 }
 
 func (m *Model) SetSize(width, height int) {
-	m.text.SetSize(width, max(height-statusHeight, 0))
+	m.text.SetSize(width, height)
+}
+
+// ScrollPercent, Wrap, CanScrollHorizontally and HorizontalScrollPercent are
+// what the tab needs to describe this tile in its own status line.
+func (m *Model) ScrollPercent() float64 {
+	return m.text.ScrollPercent()
+}
+
+func (m *Model) Wrap() bool {
+	return m.text.Wrap()
+}
+
+func (m *Model) CanScrollHorizontally() bool {
+	return m.text.CanScrollHorizontally()
+}
+
+func (m *Model) HorizontalScrollPercent() float64 {
+	return m.text.HorizontalScrollPercent()
 }
 
 func (m *Model) Search(query string) int {
@@ -73,36 +88,4 @@ func (m *Model) PrevMatch() {
 
 func (m *Model) MatchPosition() (current, total int) {
 	return m.text.MatchPosition()
-}
-
-// statusView is the tile's own footer: scroll position plus the keys that only
-// apply here (wrap toggle, horizontal scroll). Positions are only shown when
-// there is actually something off-screen in that direction.
-func (m *Model) statusView() string {
-	var parts []string
-
-	if m.text.Scrollable() {
-		parts = append(parts, fmt.Sprintf("↕ %d%%", percent(m.text.ScrollPercent())))
-	}
-
-	if m.text.Wrap() {
-		parts = append(parts, "w: wrap on")
-	} else {
-		parts = append(parts, "w: wrap off")
-
-		if m.text.CanScrollHorizontally() {
-			hint := keys.Default.ScrollHorizontalHint().Help()
-
-			parts = append(parts, fmt.Sprintf("%s: %s  ↔ %d%%", hint.Key, hint.Desc, percent(m.text.HorizontalScrollPercent())))
-		}
-	}
-
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		MaxWidth(m.text.Width()).
-		Render(strings.Join(parts, "  ·  "))
-}
-
-func percent(ratio float64) int {
-	return min(max(int(ratio*100), 0), 100)
 }

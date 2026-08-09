@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -17,6 +18,7 @@ import (
 	"github.com/atrahy/easypg/internal/tui/components/schemaTable"
 	"github.com/atrahy/easypg/internal/tui/components/search"
 	"github.com/atrahy/easypg/internal/tui/components/searchBar"
+	"github.com/atrahy/easypg/internal/tui/components/statusBar"
 	"github.com/atrahy/easypg/internal/tui/keys"
 )
 
@@ -24,11 +26,24 @@ import (
 // left navigation column; the objects pane takes the remaining height.
 const schemaVisibleRows = 6
 
-// promptBlockWidth is how much of the footer the mode block takes while a prompt
-// is open — "SEARCH" and "FILTER" are both 6 cells, plus the block's padding and
-// the gap before the prompt. The text input is sized against it so the footer
-// never wraps onto a second line.
-const promptBlockWidth = 6 + 2 + 1
+// statusHeight is what the two bottom lines cost the layout: the status bar and,
+// under it, the message line (prompt, confirmations, key hints).
+const statusHeight = 2
+
+// pathSeparator joins the levels of the status bar's context path; listIcon and
+// textIcon say what its position indicator is counting — rows or lines.
+//
+// The list icon is "≡" and not the more obvious "☰": both are East Asian
+// Ambiguous, but zellij draws the trigram two cells wide where the terminal
+// underneath draws it one, and every occurrence then shifts the rest of the
+// line. "≡", like the arrows and separators used elsewhere, measures one cell in
+// that setup.
+const (
+	pathSeparator  = " › "
+	listIcon       = "≡"
+	textIcon       = "↕"
+	horizontalIcon = "↔"
+)
 
 // pane identifies a focusable pane. Focus cycles through them in this order —
 // tab/shift+tab, and h/l (or the arrows) as aliases — while 1/2/3 jump straight
@@ -448,7 +463,7 @@ func (t *definitionTabModel) closeHelp() {
 
 func (t *definitionTabModel) openHelp() {
 	t.helpPane.SetSections(keys.Default.FullHelp(t.helpContext()))
-	t.helpPane.SetSize(t.width, t.height-1)
+	t.helpPane.SetSize(t.width, t.height-statusHeight)
 	t.helpOpen = true
 }
 
@@ -469,7 +484,7 @@ func (t *definitionTabModel) startPromptForFocus() tea.Cmd {
 // startPrompt opens the footer prompt in search or filter mode.
 func (t *definitionTabModel) startPrompt(target mode) tea.Cmd {
 	t.mode = target
-	t.searchBar.SetWidth(clampZero(t.width - promptBlockWidth))
+	t.searchBar.SetWidth(t.width)
 
 	if target == modeFilter {
 		return t.searchBar.Start("filter: ", "hide non-matching rows")
@@ -489,6 +504,15 @@ func (t definitionTabModel) helpContext() keys.Context {
 		ctx.HasTabs = true
 		ctx.IsDetail = true
 		ctx.IsText = t.detailPane.ActiveTabIsText()
+
+		if ctx.IsText {
+			// The SQL tile's own status line is gone; its state is reported by
+			// the hint line, which needs to know it.
+			ctx.WrapOn = t.detailPane.Wrap()
+			ctx.CanScrollX = t.detailPane.CanScrollHorizontally()
+		}
+
+		ctx.InspectorOpen = t.detailPane.InspectorOpen()
 	}
 
 	ctx.IsList = t.focusedIsList()
@@ -630,12 +654,17 @@ func (t definitionTabModel) View() string {
 		body = overlay.Center(body, t.helpPane.View())
 	}
 
-	// The footer is clamped to exactly one line here rather than trusted to be
-	// one: the root view wraps anything wider than the screen, and a footer
-	// spilling onto a second line shifts the whole layout up.
-	footer := lipgloss.NewStyle().MaxWidth(t.width).MaxHeight(1).Render(t.footerView())
+	// Both lines are clamped to exactly one line here rather than trusted to be
+	// one: the root view wraps anything wider than the screen, and a status line
+	// spilling onto a second row shifts the whole layout up.
+	line := lipgloss.NewStyle().MaxWidth(t.width).MaxHeight(1)
 
-	return lipgloss.JoinVertical(lipgloss.Left, body, footer)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		body,
+		line.Render(t.statusBarView()),
+		line.Render(t.messageView()),
+	)
 }
 
 // layoutView draws the three panes side by side, or the focused one alone when
@@ -666,61 +695,132 @@ func (t definitionTabModel) focusedView() string {
 	}
 }
 
-// footerView renders the status line: a vim-style mode block, then the search
-// prompt, a transient notice, the last fetch error, or the focused pane's key
-// hints. Always exactly one line, so the layout height stays stable.
-func (t definitionTabModel) footerView() string {
-	block := t.modeBlockView()
+// statusBarView is the first of the two bottom lines: the state, and only the
+// state — mode, where the focused pane points, how far into it, and the key that
+// opens the help. Nothing transient takes a segment over, which is what lets the
+// context stay put while a prompt is being typed on the line below.
+func (t definitionTabModel) statusBarView() string {
+	label, color := t.modeLabel()
 
-	return lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		block,
-		t.footerContent(clampZero(t.width-lipgloss.Width(block))),
-	)
+	return statusBar.Bar{
+		Mode:      label,
+		ModeColor: color,
+		Context:   t.contextPath(),
+		Info:      t.progressView(),
+		Help:      keys.Default.Help.Help().Key + " Help",
+		Width:     t.width,
+	}.View()
 }
 
-// modeBlockView is the vim-like indicator in the bottom-left corner. A confirmed
-// search or filter gets its own state rather than falling back to NORMAL: the
-// pane is still narrowed (or still holding matches for n/N), and that has to be
-// visible. Those two are derived from the pane itself, so moving the focus can
-// never leave a stale label behind.
-//
-// The block hugs its label, so what follows shifts when the mode changes; only
-// the prompt is protected from that, since the two modes that show one are the
-// same width.
-func (t definitionTabModel) modeBlockView() string {
-	label, color := "NORMAL", "63"
-
+// modeLabel is the vim-like state. A confirmed search or filter gets its own
+// label rather than falling back to NORMAL: the pane is still narrowed (or still
+// holding matches for n/N), and that has to be visible. Those two are derived
+// from the pane itself, so moving the focus can never leave a stale label behind.
+func (t definitionTabModel) modeLabel() (label, color string) {
 	switch {
 	case t.mode == modeSearch:
-		label, color = "SEARCH", "214"
+		return "SEARCH", "214"
 	case t.mode == modeFilter:
-		label, color = "FILTER", "42"
+		return "FILTER", "42"
 	case t.filterActive():
-		label, color = "FILTERED", "42"
+		return "FILTERED", "42"
 	case t.matchesActive():
-		label, color = "MATCHES", "214"
+		return "MATCHES", "214"
 	case t.helpOpen:
-		label, color = "HELP", "205"
+		return "HELP", "205"
+	default:
+		return "NORMAL", "63"
 	}
-
-	return lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("232")).
-		Background(lipgloss.Color(color)).
-		Padding(0, 1).
-		Render(label)
 }
 
-func (t definitionTabModel) footerContent(width int) string {
+// contextPath spells out what the focused pane points at, stopping at the level
+// the keyboard is driving: the bar describes what the next key press will act on,
+// not the whole drill-down.
+func (t definitionTabModel) contextPath() string {
+	schema := t.schemaTile.GetSelectedItemName()
+
+	if t.focus == paneSchema {
+		return schema
+	}
+
+	sel, ok := t.objectsPane.GetSelection()
+	if !ok {
+		return schema
+	}
+
+	if t.focus == paneObjects {
+		return joinPath(sel.Schema, sel.Name+" ("+sel.Kind+")")
+	}
+
+	return joinPath(sel.Schema, sel.Name, t.detailPane.ActiveTab(), t.detailPane.SelectedName())
+}
+
+// joinPath assembles the breadcrumb, skipping the levels that have nothing to
+// show (an object with no rows on the active tab, a schema not yet loaded).
+func joinPath(parts ...string) string {
+	kept := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		if part != "" {
+			kept = append(kept, part)
+		}
+	}
+
+	return strings.Join(kept, pathSeparator)
+}
+
+// progressView is the bar's position segment: an icon telling what is being
+// measured — rows or lines — and how far in we are. The SQL tile scrolls
+// sideways too, and it stopped reporting that itself, so a second share joins
+// the first whenever there is something off-screen to the right.
+func (t definitionTabModel) progressView() string {
+	var parts []string
+
+	if ratio, ok := t.paneProgress(); ok {
+		icon := listIcon
+		if !t.focusedIsList() {
+			icon = textIcon
+		}
+
+		parts = append(parts, fmt.Sprintf("%s %d%%", icon, percent(ratio)))
+	}
+
+	if t.focus == paneDetail && t.detailPane.ActiveTabIsText() && t.detailPane.CanScrollHorizontally() {
+		parts = append(parts, fmt.Sprintf("%s %d%%", horizontalIcon, percent(t.detailPane.HorizontalScrollPercent())))
+	}
+
+	return strings.Join(parts, "  ")
+}
+
+func percent(ratio float64) int {
+	return min(max(int(ratio*100), 0), 100)
+}
+
+func (t definitionTabModel) paneProgress() (ratio float64, ok bool) {
+	if t.focus == paneDetail {
+		return t.detailPane.Progress()
+	}
+
+	current, total := t.panePosition(t.focus)
+	if total == 0 {
+		return 0, false
+	}
+
+	return float64(current) / float64(total), true
+}
+
+// messageView is the second bottom line: whatever is most worth saying right now
+// — the prompt being typed, a confirmation or an error, how to leave a confirmed
+// search, and failing all that the focused pane's key hints. Plain text on the
+// terminal's own background, so the coloured bar above stays the only block.
+func (t definitionTabModel) messageView() string {
+	if t.mode != modeNormal {
+		return t.searchBar.View()
+	}
+
 	content, color := "", "240"
 
 	switch {
-	case t.mode != modeNormal:
-		// Same leading gap as the other states: the prompt must not sit flush
-		// against the block.
-		return " " + t.searchBar.View()
-
 	case t.notice != "":
 		content, color = t.notice, "42"
 
@@ -741,8 +841,8 @@ func (t definitionTabModel) footerContent(width int) string {
 
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(color)).
-		MaxWidth(width).
-		Render(" " + content)
+		MaxWidth(t.width).
+		Render(content)
 }
 
 
@@ -785,11 +885,11 @@ func (t definitionTabModel) searchState() string {
 // objects) and a wider right detail column. Each pane draws a rounded border, so
 // its content box is the total minus 2 in each dimension.
 func (t *definitionTabModel) updateSize() {
-	// One line is reserved at the bottom for the status/error/search footer.
-	usableHeight := t.height - 1
+	// Two lines are reserved at the bottom: the status bar and the message line.
+	usableHeight := t.height - statusHeight
 
 	t.helpPane.SetSize(t.width, usableHeight)
-	t.searchBar.SetWidth(clampZero(t.width - promptBlockWidth))
+	t.searchBar.SetWidth(t.width)
 
 	if t.zoomed {
 		t.zoomWidth = clampZero(t.width - 2)

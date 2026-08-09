@@ -124,6 +124,13 @@ type Context struct {
 	IsText bool
 	// IsList tells whether the active tile is a row list, which can be filtered.
 	IsList bool
+	// WrapOn and CanScrollX describe the state of a text tile. The hint line
+	// doubles as its readout, since the tile itself draws none.
+	WrapOn     bool
+	CanScrollX bool
+	// InspectorOpen is the detail pane's fold state, so the hint can say what
+	// the key will do rather than that it toggles something.
+	InspectorOpen bool
 }
 
 // Section is a titled group of bindings in the help overlay.
@@ -132,19 +139,53 @@ type Section struct {
 	Bindings []key.Binding
 }
 
-// ShortHelp is the one-line footer hint: the few keys that matter here.
+// ShortHelp is the one-line hint under the status bar: what changes with the
+// context, and only that.
+//
+// The keys that are the same everywhere — cycling panes, moving the cursor,
+// quitting — are deliberately absent: they never vary, they are the first thing
+// a user learns, and repeating them on every screen crowds out the entries that
+// actually depend on where you are. "?" lists them, and the bar advertises "?".
 func (k KeyMap) ShortHelp(ctx Context) []key.Binding {
-	// Display-only binding: the movement keys read better merged than as two
-	// separate entries on a single line.
-	move := key.NewBinding(key.WithHelp("↑/↓ j/k", "move"))
+	// "/" leads: it is the key one reaches for most, and its label is the one
+	// that says what kind of pane this is (rows to filter, or text to search).
+	bindings := []key.Binding{k.searchBinding(ctx)}
 
-	bindings := []key.Binding{k.NextPane, move}
+	if ctx.IsText {
+		// The wrap entry doubles as the tile's state readout now that the tile
+		// draws no status line of its own: "w: wrap off" says both what the key
+		// does and where it currently stands.
+		bindings = append(bindings, relabel(k.Wrap, wrapState(ctx.WrapOn)))
 
-	if ctx.HasTabs {
-		bindings = append(bindings, key.NewBinding(key.WithHelp("[/]", "tab")))
+		if ctx.CanScrollX {
+			bindings = append(bindings, k.ScrollHorizontalHint())
+		}
 	}
 
-	return append(bindings, k.searchBinding(ctx), k.Help, k.Quit)
+	// The inspector strip is the one pane element nothing on screen names, so the
+	// hint spells out what "i" will do to it — it is inert on the SQL tab, which
+	// has no strip, and absent from the line there.
+	if ctx.IsDetail && ctx.IsList {
+		bindings = append(bindings, relabel(k.Inspector, inspectorState(ctx.InspectorOpen)))
+	}
+
+	return bindings
+}
+
+func wrapState(on bool) string {
+	if on {
+		return "wrap on"
+	}
+
+	return "wrap off"
+}
+
+func inspectorState(open bool) string {
+	if open {
+		return "hide inspector"
+	}
+
+	return "show inspector"
 }
 
 // searchBinding relabels "/" with what it actually does here, so the footer and

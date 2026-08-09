@@ -179,6 +179,12 @@ func (p *DetailPane) isInspectorToggle(msg tea.Msg) bool {
 	return ok && key.Matches(keyMsg, keys.Default.Inspector) && p.tabs.ActiveLabel() != tabSQL
 }
 
+// InspectorOpen is the fold state of the inspector strip, for the hint line —
+// which says what "i" will do next rather than naming the toggle.
+func (p *DetailPane) InspectorOpen() bool {
+	return p.inspectorOpen
+}
+
 // ActiveTab is the label of the visible sub-tab, for the contextual help.
 func (p *DetailPane) ActiveTab() string {
 	return p.tabs.ActiveLabel()
@@ -225,6 +231,56 @@ func (p *DetailPane) Position() (current, total int) {
 	default:
 		return p.columns.Position()
 	}
+}
+
+// SelectedName is the highlighted row's name, for the status bar's context path.
+// The SQL tab has no rows, so it names nothing.
+func (p *DetailPane) SelectedName() string {
+	switch p.tabs.ActiveLabel() {
+	case tabIndex:
+		return p.indexes.SelectedName()
+	case tabConstraint:
+		return p.constraints.SelectedName()
+	case tabSQL:
+		return ""
+	default:
+		return p.columns.SelectedName()
+	}
+}
+
+// Progress is how far into the active tile we are, as a ratio: the cursor's rank
+// on a list, the scroll on the SQL tab. ok is false when there is nothing to be
+// positioned in, so the caller can leave the indicator out.
+func (p *DetailPane) Progress() (ratio float64, ok bool) {
+	if p.tabs.ActiveLabel() == tabSQL {
+		if p.sqlView.Content() == "" {
+			return 0, false
+		}
+
+		return p.sqlView.ScrollPercent(), true
+	}
+
+	current, total := p.Position()
+	if total == 0 {
+		return 0, false
+	}
+
+	return float64(current) / float64(total), true
+}
+
+// Wrap, CanScrollHorizontally and HorizontalScrollPercent describe the SQL tile
+// for the tab's status bar and its key hints; they are meaningless on the
+// tabular tabs, which the caller checks with ActiveTabIsText.
+func (p *DetailPane) Wrap() bool {
+	return p.sqlView.Wrap()
+}
+
+func (p *DetailPane) CanScrollHorizontally() bool {
+	return p.sqlView.CanScrollHorizontally()
+}
+
+func (p *DetailPane) HorizontalScrollPercent() float64 {
+	return p.sqlView.HorizontalScrollPercent()
 }
 
 // Searching only ever applies to the SQL tab: the tabular tabs are filtered

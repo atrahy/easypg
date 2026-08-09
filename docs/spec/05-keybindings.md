@@ -130,10 +130,98 @@ Semantics: substring match, **smart case** (case-insensitive unless the query
 contains an uppercase letter), wrapping around the end, a `3/17` (search) or
 `12 rows` (filter) indicator in the prompt.
 
-### Mode block
+### Status bar
 
-The bottom-left corner holds a vim-style mode block, so the current state is
-always visible rather than inferred from what the footer happens to say:
+The bottom of the screen is two lines, as vim's is: a **status bar** that
+describes the state, and under it a **message line** that talks to you.
+
+```
+ NORMAL  public › users › Index › users_email_key            ≡ 33%   ? Help
+ /: filter rows  ·  i: hide inspector
+```
+
+#### Line 1 — the bar
+
+Segments in the Charm house style (the one
+[soft-serve](https://github.com/charmbracelet/soft-serve) uses): coloured blocks
+laid side by side, each answering one question, the middle one stretching to fill
+whatever is left.
+
+| Segment | Holds | Style |
+|---|---|---|
+| **mode** | the vim-style mode block below | bold, per-mode background |
+| **context** | what the focused pane points at | grey block, fills the line, truncated with `…` |
+| **position** | how far into the focused pane's content the cursor (or the scroll) sits, behind a `≡` on a list / `↕` on a text view — plus a `↔` share when the SQL tile has something off-screen to the right | purple block |
+| **help** | `? Help` — the one key that opens everything else | dark grey block |
+
+The context path stops at the level the keyboard is driving: `public` on the
+schema pane, `public › users (table)` on the objects pane, and
+`public › users › Index › users_email_key` on the detail pane — its sub-tab and
+its selected row included. It follows the focus rather than always spelling the
+full drill-down: the bar describes what the next key press will act on.
+
+The bar shows *state*, and only state: nothing transient ever takes a segment
+over. That is what makes it readable at a glance — the context is where you left
+it, even while you type a query.
+
+The list icon is `≡` and not the more obvious `☰` (U+2630): both are East Asian
+**Ambiguous**, but zellij draws the trigram two cells wide where the terminal
+under it draws one, and every occurrence then shifts the rest of the line. `≡`,
+the arrows in the key labels, the `·` separators, the `›` of the path and the
+box-drawing borders all measure one cell in that same alacritty + zellij setup —
+so the rule is not "no Unicode in the chrome", it is: **measure a glyph inside a
+multiplexer before building a column on it.**
+
+The position segment and the `x/total` in a pane's bottom border are not
+duplicates: `x/total` says *which row*, the percentage says *where in the whole*
+— the two answers vim puts at opposite ends of its ruler.
+
+#### Line 2 — the message line
+
+Plain text on the terminal's own background (no block, no fill), holding whatever
+is most worth saying right now, in this order:
+
+| Priority | Content |
+|---|---|
+| 1 | the **`/` prompt** being typed, with its `3/17` / `12 rows` counter |
+| 2 | a **message**: `copied to clipboard` (green), a query error (red) |
+| 3 | the **quick help of a confirmed search or filter**: `3/17 · n/N: next/prev · esc: clear`, `rows hidden · esc: clear filter` |
+| 4 | the **quick help** of the focused pane — the `ShortHelp` of the keymap |
+
+The prompt moving here is why the bar can stand still: it used to sit next to the
+mode block and push the rest of the line around. It now owns a line of its own,
+sized to the full width, and the field never resizes as the mode changes.
+
+The quick help is still generated from the keymap (`KeyMap.ShortHelp`), and it is
+the *floor* of this list rather than a competitor to it: with nothing to report,
+the screen still tells you what the keys do *here*.
+
+It lists **only what changes with the context**, and `/` leads it — the key one
+reaches for most, whose label doubles as a statement of what this pane is: rows
+to filter, or text to search.
+
+Everything constant is gone from it: cycling panes, `j`/`k`, `q` (the same on
+every screen, learned once) and `[`/`]` (the tab strip it drives is drawn in the
+pane's own border, [01](./01-definition-tab.md)). `?` too — the bar above carries
+it as a segment. What is left is `/`, `i` on the detail pane (the inspector strip
+is the one element on screen that nothing else names), and, on the SQL tab, the
+keys that used to live in the tile's own status line:
+
+```
+ NORMAL  public › users › SQL          ↕ 42%  ↔ 30%   ? Help
+ /: search text  ·  w: wrap off  ·  shift+←/→ H/L: scroll
+```
+
+**The SQL tile no longer draws a status line.** It reported three things — the
+scroll position, the wrap state, the horizontal keys — and the two bottom lines
+now say all three: the position in the bar, the state and the keys in the hint
+line, where `w: wrap off` doubles as the readout (`KeyMap.ShortHelp` relabels the
+binding with the state it is in). The statement gets that row back.
+
+#### Mode block
+
+The leftmost segment is a vim-style mode block, so the current state is always
+visible rather than inferred from what the bar happens to say:
 
 | Block | When |
 |---|---|
@@ -152,9 +240,9 @@ something — a state that deserves its own name.
 a field on the model: a filter belongs to the list it hides rows from, so
 switching focus shows the state of the pane you are now on, never a stale one.
 
-The block hugs its label, so the footer text after it shifts with the mode. The
-one case that must not move is the prompt, and it does not: `SEARCH` and `FILTER`
-are the same width, and the text input is sized against it.
+The block hugs its label, so the context segment after it shifts with the mode —
+which no longer matters for the prompt, since that lives on the line below and is
+sized to the full width.
 
 ### Help overlay (`?`)
 
