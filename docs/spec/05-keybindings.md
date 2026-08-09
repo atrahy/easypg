@@ -172,6 +172,12 @@ Content = the bindings that apply right now, in sections: **Global**, **Panes**,
 **Focused pane** (its name in the title), **Search & filter**, generated from the
 keymap.
 
+Its own hint line is generated too, from `KeyMap.OverlayHelp()`, which **relabels
+the keys that mean something else here**: `enter` runs the selected binding (not
+"confirm search") and `esc` closes the window. Same keys, same single
+declaration — only the description changes with the context, as `/` already does
+between a list and a text view.
+
 Running a binding is implemented by **replaying its key** through the normal
 handlers (`keys.Synthesize`), not by a second dispatch table — so the help can
 never drift from what the keys actually do. Movement bindings (`j`/`k`, paging)

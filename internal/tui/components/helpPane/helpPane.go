@@ -20,11 +20,12 @@ const (
 	widthRatio, minWidth, maxWidth    = 3, 44, 96
 	heightRatio, minHeight, maxHeight = 4, 8, 28
 
-	// frame is the border (2) plus the horizontal padding (2) of the box.
-	frame = 4
+	// border is what the rounded border costs (2 cells, 2 lines), padding the
+	// horizontal padding inside it.
+	border, padding = 2, 2
 
-	// chrome is the border (2) plus the title and hint lines.
-	chrome = 4
+	// chrome is the border plus the title and hint lines.
+	chrome = border + 2
 )
 
 var (
@@ -207,7 +208,7 @@ func (m *Model) Filtering() bool {
 
 func (m *Model) View() string {
 	body := make([]string, 0, m.bodyHeight())
-	inner := max(m.boxWidth-frame, 0)
+	inner := max(m.boxWidth-border-padding, 0)
 
 	for i := m.offset; i < len(m.visible) && len(body) < m.bodyHeight(); i++ {
 		line := m.visible[i].text
@@ -223,11 +224,14 @@ func (m *Model) View() string {
 		body = append(body, "")
 	}
 
-	hint := keys.RenderShort([]key.Binding{
-		keys.Default.AcceptSearch, keys.Default.Search, keys.Default.Cancel,
-	})
+	hint := keys.RenderShort(keys.Default.OverlayHelp())
 
-	return boxStyle.Width(inner).Render(lipgloss.JoinVertical(
+	// lipgloss counts the padding inside Width (it wraps at width - padding), so
+	// the box is sized to the text width *plus* its padding. Sizing it to the
+	// text width alone word-wraps every full-width line, and wrapping strips the
+	// trailing spaces — the very cells that carry the selected row's highlight
+	// to the right edge.
+	return boxStyle.Width(inner + padding).Render(lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleStyle.Render("Keys"),
 		strings.Join(body, "\n"),

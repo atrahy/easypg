@@ -157,6 +157,25 @@ func (k KeyMap) searchBinding(ctx Context) key.Binding {
 	return key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search text"))
 }
 
+// OverlayHelp is the hint line at the bottom of the "?" window: what the keys do
+// *while it is open*. "enter" and "esc" are relabeled here — in the overlay they
+// run the highlighted binding and close the window, they do not confirm or
+// cancel a search — and they keep their keys, so this stays one declaration.
+func (k KeyMap) OverlayHelp() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithHelp("↑/↓ j/k", "move")),
+		relabel(k.AcceptSearch, "run selected"),
+		relabel(k.Search, "filter"),
+		relabel(k.Cancel, "close"),
+	}
+}
+
+// relabel copies a binding with a different description, for the contexts where
+// the same key means something else than its default label says.
+func relabel(b key.Binding, desc string) key.Binding {
+	return key.NewBinding(key.WithKeys(b.Keys()...), key.WithHelp(b.Help().Key, desc))
+}
+
 // FullHelp is the overlay content: everything that applies right now, grouped.
 func (k KeyMap) FullHelp(ctx Context) []Section {
 	paneBindings := []key.Binding{
