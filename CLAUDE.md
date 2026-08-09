@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 - Run the app: `task run` (or `go run .`)
-- Build: `go build ./...`
+- Build + vet: `task check` (or `go build ./... && go vet ./...`)
 - Test: `go test ./...`
 
 The app connects to a hardcoded Postgres DSN in `main.go` (`pgUrlString`): `postgres://local_user@localhost:5432/local_db`. There's no config file or env var support yet — a local Postgres instance with that user/db must exist to run the app.

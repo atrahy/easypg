@@ -6,3 +6,9 @@ tasks:
     desc: Run the project
     cmds:
       - go run .
+
+  check:
+    desc: Build and vet the project
+    cmds:
+      - go build ./...
+      - go vet ./...
