@@ -12,21 +12,45 @@ Phases **C → E** (Query Tool then polish) come next and are themselves sequent
 
 ---
 
-## Track A — Config & connection registry
+## Track A — Connections: config, secrets & selection
 
-### A1. Config package
-- **Files**: new `internal/config/config.go`; add a TOML dependency (e.g. `github.com/BurntSushi/toml`) to `go.mod`.
-- A `Config` struct with a **list** of named connections (`[]Connection{Name, DSN | host/port/user/db/sslmode}`), read from `~/.config/easypg/config.toml`. Clear error message if the file is missing.
-- ✅ The app reads the config at startup; the first connection (or a default) is used.
+Designed in [07 — Connections](./07-connections.md), which **supersedes** the
+original A1→A3 (read a TOML file, drop the DSN, leave a list-shaped struct as an
+extension point). The scope grew on purpose: every CLI juggling several targets
+ships a way to *add* one and a view to *pick* one, and the config file is only
+worth designing once — with the secret question settled, since a file that can
+hold a password cannot be committed.
 
-### A2. Remove the hardcoded DSN
-- **Files**: `main.go` (remove the `pgUrlString` const, build the DSN from the selected connection; `sql.Connect` already takes a string, unchanged).
-- ✅ No more hardcoded DSN string; startup goes through the config.
+Six steps, detailed with their files and criteria in
+[07 — Phased breakdown](./07-connections.md#phased-breakdown):
 
-### A3. Multi-connection extension point
-- The registry is already modeled as a list; the UI only exposes one connection for now. Document the future connection selector (the way lazygit handles multiple repos).
-- ✅ "List of connections" model in place, ready for a later UI selector.
-- *Related backlog*: passwords in the system keychain (`go-keyring`, macOS/Linux) — see [04 — Backlog](./04-backlog.md), out of scope for this track.
+- **A1.** Config files & loader — XDG `config.toml` (reserved) + `connections.toml`
+  (one `[name]` table per profile and nothing else, `dsn` or discrete fields,
+  `auth`), all validation errors at once, a `password` key **rejected**. ✅ A
+  hand-written file loads or fails explicitly.
+- **A2.** Secrets — `internal/secrets` over `zalando/go-keyring`;
+  `sql.Connect(dsn, password)` via `ParseConfig` + `ConnectConfig`, so no secret
+  ever enters a connection string. ✅ `keychain` / `pgpass` / `env` / `none` all
+  connect.
+- **A3.** Resolution & the end of the hardcoded DSN — `--connection`/`-c` places
+  the **cursor** on the screen, which always opens rather than being skipped when
+  the config leaves no doubt (there is no auto-connection left, and hence no
+  `default` key); the repo ships `scripts/xdg/` (reached through `XDG_CONFIG_HOME`) so `task run`
+  keeps working on a fresh clone; connect becomes an async Cmd in the root model.
+  ✅ No DSN in the source, and an unreachable host is an error on screen, not a
+  hang.
+- **A4.** Connection screen — the profile list (`paneBox` + `tableLayout` +
+  `TableFilter`), opened when the choice is ambiguous. ✅ `enter` connects, `/`
+  filters, an empty config shows the empty state.
+- **A5.** Wizard — `n` opens a form; `ctrl+t` tests, `ctrl+s` **appends** the block
+  to the file (comments preserved) and stores the secret in the vault. ✅ Create a
+  profile without leaving the app.
+- **A6.** Runtime switch — `c` reopens the screen from a live session and rebuilds
+  the definition tab on the new connection; a `keychain` profile with no entry
+  prompts for its password. ✅ Change database without restarting.
+
+*Absorbed from the backlog*: passwords in the system keychain, which A2 now
+implements rather than defers.
 
 ---
 

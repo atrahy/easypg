@@ -1,17 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/atrahy/easypg/internal/sql"
+	"github.com/atrahy/easypg/internal/config"
 	"github.com/atrahy/easypg/internal/tui"
-)
-
-const (
-	pgUrlString = "postgres://local_user@localhost:5432/local_db"
 )
 
 func init() {
@@ -26,19 +23,53 @@ func init() {
 }
 
 func main() {
-	db, err := sql.Connect(pgUrlString)
+	var requested string
+
+	flag.StringVar(&requested, "connection", "", "name of the connection to start on")
+	flag.StringVar(&requested, "c", "", "shorthand for -connection")
+	flag.Parse()
+
+	if err := run(requested); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// run wires the config to the TUI. Nothing connects here: the root model owns
+// the connection, since it is the one that can swap it at runtime, and a
+// database that does not answer must produce an error on screen rather than a
+// program that never draws anything.
+func run(requested string) error {
+	dir, err := config.Dir()
 	if err != nil {
-		fmt.Printf("Debug: Unable to connect to database: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-	defer db.Close()
 
-	// Alt-screen is not a program option anymore: the root model declares it on
-	// every frame through its tea.View.
-	p := tea.NewProgram(tui.NewModel(db))
-
-	if _, err = p.Run(); err != nil {
-		fmt.Printf("Tea error: %v\n", err)
-		os.Exit(1)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		return err
 	}
+
+	conns, err := config.LoadConnections(dir)
+	if err != nil {
+		return err
+	}
+
+	// A nil target with no error is the ordinary case: nothing was asked for on
+	// the command line, so the screen simply opens with its cursor at the top.
+	target, err := conns.Resolve(requested)
+	if err != nil {
+		return err
+	}
+
+	final, err := tea.NewProgram(tui.NewModel(dir, cfg, conns, target)).Run()
+	if err != nil {
+		return fmt.Errorf("tea: %w", err)
+	}
+
+	if model, ok := final.(tui.Model); ok {
+		model.Close()
+	}
+
+	return nil
 }

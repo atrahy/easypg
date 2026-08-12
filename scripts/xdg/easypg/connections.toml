@@ -1,0 +1,31 @@
+# Test config — used by `task run` (XDG_CONFIG_HOME=scripts/xdg).
+#
+# Committed on purpose: it holds no secret, which is the whole point of the
+# format (a "password" key is rejected by the loader; passwords live in the
+# system vault). Plain `easypg` reads your real ~/.config/easypg instead.
+#
+# Every table is a connection — the file holds nothing else.
+# The schema these expect is scripts/example_schema.sql.
+
+[local]
+host   = "localhost"
+user   = "local_user"
+dbname = "local_db"
+auth   = "none"           # trust/peer on a local socket — no vault entry needed
+
+# Deliberately unreachable: gives "c" a second entry to switch to, and exercises
+# the connection error path without needing a second database.
+[down]
+host   = "127.0.0.1"
+port   = 5433
+user   = "nobody"
+dbname = "nothing"
+auth   = "none"
+
+# The same database as "local", but through the vault: exercises the password
+# prompt, "f" (forget), and the re-prompt when a stored password is refused.
+[local-vault]
+host   = "localhost"
+user   = "local_user"
+dbname = "local_db"
+auth   = "keychain"

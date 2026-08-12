@@ -7,6 +7,7 @@ Spec index. See also:
 - [04 — Backlog & technical debt](./04-backlog.md)
 - [05 — Keybindings, help overlay & search](./05-keybindings.md)
 - [06 — Charm v2 migration](./06-charm-v2.md)
+- [07 — Connections: config, secrets & selection](./07-connections.md)
 
 ## Vision
 
@@ -25,7 +26,7 @@ friction.
 
 These points were open in the v1 spec; they are settled now to avoid refactoring features that are already planned:
 
-- **Connections**: multi-connection support is baked into the architecture from the start (a registry of named connections via config, the way lazygit handles multiple repos), even though only a single connection is used for now. The hardcoded DSN in `main.go` should be replaced early by this mechanism rather than first patched into a simple config and then re-refactored later.
+- **Connections**: multi-connection support is baked into the architecture from the start (a registry of named connections via config, the way lazygit handles multiple repos), even though only a single connection is used for now. The hardcoded DSN in `main.go` should be replaced early by this mechanism rather than first patched into a simple config and then re-refactored later. Designed in full in [07 — Connections](./07-connections.md): XDG config files, secrets in the system vault (never in a file, so the config stays committable), a selection screen and a creation wizard.
 - **Query tool — sessions**: multi-tab (several queries open in parallel, like browser tabs) is a confirmed need but not a priority for the MVP. The query tool state should therefore be modeled as a list of sessions from the start, even if the MVP only shows one on screen — multi-tab will build on this existing model, not require a refactor.
 - **Query history**: persisted to disk (survives a restart). The storage format/location must be chosen when designing the query tool, not bolted on afterwards.
 - **Result export (CSV)**: not a priority for the MVP, but the results component must keep the raw rows in memory (not just display-formatted strings) from its inception, so that export is a simple addition later.

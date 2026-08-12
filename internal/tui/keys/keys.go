@@ -20,15 +20,26 @@ import (
 
 type KeyMap struct {
 	// Global
-	Help       key.Binding
-	Search     key.Binding
-	Quit       key.Binding
-	ForceQuit  key.Binding
-	Cancel     key.Binding
-	Refresh    key.Binding
-	RefreshAll key.Binding
-	Zoom       key.Binding
-	Copy       key.Binding
+	Help        key.Binding
+	Search      key.Binding
+	Quit        key.Binding
+	ForceQuit   key.Binding
+	Cancel      key.Binding
+	Refresh     key.Binding
+	RefreshAll  key.Binding
+	Zoom        key.Binding
+	Copy        key.Binding
+	Connections key.Binding
+
+	// Connection screen and its wizard
+	NewConn      key.Binding
+	ForgetSecret key.Binding
+	NextField    key.Binding
+	PrevField    key.Binding
+	TestConn     key.Binding
+	SaveConn     key.Binding
+	RevealSecret key.Binding
+	StoreSecret  key.Binding
 
 	// Focus
 	NextPane    key.Binding
@@ -77,6 +88,33 @@ var Default = KeyMap{
 	RefreshAll: key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh all")),
 	Zoom:       key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom pane")),
 	Copy:       key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy to clipboard")),
+	// "c" opens the connection screen: a free letter, and the initial of what it
+	// shows. It is listed under Global in "?", so it is learned like every other
+	// key rather than from the documentation.
+	Connections: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "connections")),
+
+	// The wizard's own keys. "n" doubles as NextMatch elsewhere, but the picker
+	// holds no search matches, so the two never apply at the same time.
+	NewConn: key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new connection")),
+	// The way out of a vault entry gone wrong, without opening the system's own
+	// keychain UI to fix what this app put there.
+	ForgetSecret: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "forget password")),
+	NextField: key.NewBinding(key.WithKeys("tab", "down"), key.WithHelp("tab", "next field")),
+	PrevField: key.NewBinding(key.WithKeys("shift+tab", "up"), key.WithHelp("shift+tab", "previous field")),
+	// The form's actions carry a function-key alias each. A terminal cannot
+	// deliver cmd+… to a TUI (macOS terminals send no Super modifier outside the
+	// Kitty keyboard protocol, which alacritty and Terminal.app do not implement),
+	// so the portable second option is F-keys — which also gives ctrl+s a way out
+	// on the terminals where it still means XOFF.
+	TestConn: key.NewBinding(key.WithKeys("ctrl+t", "f2"), key.WithHelp("ctrl+t/f2", "test")),
+	// Enter submits, as in any form: the fields are walked with tab, so the key
+	// is free, and it is the one nobody has to be taught.
+	SaveConn: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save & connect")),
+	// A masked field one cannot unmask is a field one retypes on every typo.
+	RevealSecret: key.NewBinding(key.WithKeys("ctrl+r", "f3"), key.WithHelp("ctrl+r/f3", "show password")),
+	// Storing is the declared intent of auth = "keychain", but a shared or
+	// temporary machine is a good enough reason to decline it once.
+	StoreSecret: key.NewBinding(key.WithKeys("ctrl+s", "f4"), key.WithHelp("ctrl+s/f4", "remember")),
 
 	// h/l and the arrows are aliases of tab/shift+tab: focus cycles through the
 	// panes rather than moving geometrically, so every pane is reachable with
@@ -211,6 +249,71 @@ func (k KeyMap) OverlayHelp() []key.Binding {
 	}
 }
 
+// ConnectionsHelp is the hint line of the connection screen. "enter" connects
+// and "esc" goes back — same keys, same single declaration, only the description
+// follows the context. "esc" is listed only when a live session sits behind the
+// screen; at startup there is nothing to go back to.
+func (k KeyMap) ConnectionsHelp(canReturn, usesVault bool) []key.Binding {
+	bindings := []key.Binding{
+		relabel(k.AcceptSearch, "connect"),
+		k.NewConn,
+		relabel(k.Search, "filter"),
+	}
+
+	// Only listed on a profile that reads the vault: everywhere else the key has
+	// nothing to forget.
+	if usesVault {
+		bindings = append(bindings, k.ForgetSecret)
+	}
+
+	if canReturn {
+		bindings = append(bindings, relabel(k.Cancel, "back"))
+	}
+
+	return append(bindings, k.Quit)
+}
+
+// FormHelp is the wizard's hint line. Testing and saving are deliberately two
+// keys: a profile for a host that is down is a legitimate thing to write, so
+// saving does not wait on a successful test.
+func (k KeyMap) FormHelp(hasSecret, revealed bool) []key.Binding {
+	bindings := []key.Binding{k.NextField, k.TestConn, k.SaveConn}
+
+	if hasSecret {
+		bindings = append(bindings, relabel(k.RevealSecret, revealState(revealed)))
+	}
+
+	return append(bindings, relabel(k.Cancel, "cancel"))
+}
+
+// SecretHelp is the hint line of the password prompt. Both toggles carry their
+// current state rather than only their action: whether the password is about to
+// be remembered is not something to discover after pressing enter.
+func (k KeyMap) SecretHelp(store, revealed bool) []key.Binding {
+	return []key.Binding{
+		relabel(k.AcceptSearch, "connect"),
+		relabel(k.RevealSecret, revealState(revealed)),
+		relabel(k.StoreSecret, "remember: "+onOff(store)),
+		relabel(k.Cancel, "cancel"),
+	}
+}
+
+func revealState(revealed bool) string {
+	if revealed {
+		return "hide password"
+	}
+
+	return "show password"
+}
+
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+
+	return "off"
+}
+
 // relabel copies a binding with a different description, for the contexts where
 // the same key means something else than its default label says.
 func relabel(b key.Binding, desc string) key.Binding {
@@ -258,7 +361,7 @@ func (k KeyMap) FullHelp(ctx Context) []Section {
 
 	return []Section{
 		{Title: "Global", Bindings: []key.Binding{
-			k.Help, k.Refresh, k.RefreshAll, k.Zoom, k.Copy, k.Cancel, k.Quit, k.ForceQuit,
+			k.Help, k.Connections, k.Refresh, k.RefreshAll, k.Zoom, k.Copy, k.Cancel, k.Quit, k.ForceQuit,
 		}},
 		{Title: "Panes", Bindings: []key.Binding{
 			k.NextPane, k.PrevPane, k.PaneSchema, k.PaneObjects, k.PaneDetail,
@@ -292,6 +395,8 @@ var namedKeys = map[string]tea.KeyPressMsg{
 	"ctrl+u":      {Code: 'u', Mod: tea.ModCtrl},
 	"ctrl+f":      {Code: 'f', Mod: tea.ModCtrl},
 	"ctrl+b":      {Code: 'b', Mod: tea.ModCtrl},
+	"ctrl+s":      {Code: 's', Mod: tea.ModCtrl},
+	"ctrl+t":      {Code: 't', Mod: tea.ModCtrl},
 }
 
 // Synthesize rebuilds a key press from a binding's primary key. It lets the help

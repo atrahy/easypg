@@ -3,9 +3,12 @@ version: '3'
 
 tasks:
   run:
-    desc: Run the project
+    desc: Run the project against the repo's test config (scripts/xdg)
+    # The config layer reads $XDG_CONFIG_HOME/easypg, so pointing the variable at
+    # scripts/xdg picks up the committed test profiles instead of the
+    # contributor's own ~/.config/easypg. Run `go run .` to use the real one.
     cmds:
-      - go run .
+      - XDG_CONFIG_HOME=scripts/xdg go run .
 
   check:
     desc: Build and vet the project
